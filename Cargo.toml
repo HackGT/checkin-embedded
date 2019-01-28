@@ -1,0 +1,9 @@
+[package]
+name = "checkin-embedded"
+version = "0.1.0"
+authors = ["Ryan Petschek <petschekr@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+pcsc = "2"
+url = "1.7.2"
