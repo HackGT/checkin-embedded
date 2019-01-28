@@ -1,5 +1,7 @@
 use std::fmt;
 use url::Url;
+use serde::Deserialize;
+use serde_json::Value;
 
 pub enum Error {
 	Network(reqwest::Error),
@@ -32,13 +34,13 @@ pub struct CheckinAPI {
 
 impl CheckinAPI {
 	fn get_base_url() -> Url {
-		let URL = if cfg!(debug_assertions) {
+		let url = if cfg!(debug_assertions) {
 			"https://checkin.dev.hack.gt"
 		}
 		else {
 			"https://checkin.hack.gt"
 		};
-		Url::parse(URL).expect("Invalid base URL configured")
+		Url::parse(url).expect("Invalid base URL configured")
 	}
 
 	pub fn login(username: &str, password: &str) -> Result<Self, Error> {
@@ -66,7 +68,9 @@ impl CheckinAPI {
 		}
 
 		match auth_token {
-			Some(token) => {
+			Some(mut token) => {
+				// Create a HTTP cookie header out of this token
+				token.insert_str(0, "auth=");
 				Ok(Self {
 					client,
 					username: username.to_owned(),
@@ -75,5 +79,40 @@ impl CheckinAPI {
 			},
 			None => Err("No auth token set by server".into())
 		}
+	}
+
+	fn checkin_action(&self, check_in: bool, uuid: &str, tag: &str) -> Result<String, Error> {
+		let action = if check_in { "check_in" } else { "check_out" };
+		let query = format!(
+			"mutation($user: ID!, $tag: String!) {{
+				{}(user: $user, tag: $tag) {{
+					user {{
+						name
+					}}
+				}}
+			}}
+		", action);
+		let body = json!({
+			"query": query,
+			"variables": {
+				"user": uuid,
+				"tag": tag,
+			}
+		});
+		let response = self.client.post(CheckinAPI::get_base_url().join("/graphql").unwrap())
+			.header(reqwest::header::COOKIE, self.auth_token.as_str())
+			.json(&body)
+			.send()?
+			.text()?;
+		let response: Value = serde_json::from_str(&response).or(Err("Invalid JSON response"))?;
+
+		Ok(response["data"][action]["user"]["name"].as_str().unwrap().to_owned())
+	}
+
+	pub fn check_in(&self, uuid: &str, tag: &str) -> Result<String, Error> {
+		self.checkin_action(true, uuid, tag)
+	}
+	pub fn check_out(&self, uuid: &str, tag: &str) -> Result<String, Error> {
+		self.checkin_action(false, uuid, tag)
 	}
 }

@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 use pcsc::*;
 
+#[macro_use]
+extern crate serde_json;
+
 mod badge;
 mod ndef;
 mod api;
