@@ -3,6 +3,8 @@ use pcsc::*;
 
 mod badge;
 mod ndef;
+mod api;
+use api::CheckinAPI;
 
 fn main() {
     let ctx = Context::establish(Scope::User).expect("Failed to establish context");

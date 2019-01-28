@@ -100,7 +100,7 @@ impl NFCBadge<'_> {
 	pub fn set_buzzer(&self, enabled: bool) -> Result<bool, Error> {
 		let value = if enabled { 0xFF } else { 0x00 };
 		let apdu = [0xFF, 0x00, 0x52, value, 0x00];
-		let response = self.send_data(&apdu)?;
+		self.send_data(&apdu)?;
 		Ok(enabled)
 	}
 
@@ -109,7 +109,7 @@ impl NFCBadge<'_> {
 		let mut rapdu = self.card.transmit(apdu, &mut rapdu_buf)?.to_vec();
 
 		if rapdu.len() < 2 {
-			return Err(Error::from(pcsc::Error::InvalidValue));
+			return Err(pcsc::Error::InvalidValue.into());
 		}
 
 		let status = [rapdu[rapdu.len() - 2], rapdu[rapdu.len() - 1]];
@@ -122,7 +122,7 @@ impl NFCBadge<'_> {
 			})
 		}
 		else {
-			Err(Error::from(status))
+			Err(status.into())
 		}
 	}
 }

@@ -7,3 +7,5 @@ edition = "2018"
 [dependencies]
 pcsc = "2"
 url = "1.7.2"
+reqwest = "0.9.9"
+regex = "1"
