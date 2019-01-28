@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 use pcsc::*;
 
+mod badge;
+mod ndef;
+
 fn main() {
     let ctx = Context::establish(Scope::User).expect("Failed to establish context");
 
@@ -66,5 +69,10 @@ fn card_tapped(ctx: &Context, reader: &std::ffi::CStr) {
             std::process::exit(1);
         }
     };
-    println!("Woah a card got tapped");
+
+    let badge = badge::NFCBadge::new(&card);
+    match badge.get_user_id() {
+        Ok(id) => println!("ID is {}", id),
+        Err(err) => println!("Error getting user ID: {:?}", err),
+    }
 }
