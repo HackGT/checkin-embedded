@@ -27,7 +27,6 @@ impl From<&'static str> for Error {
 
 pub struct CheckinAPI {
 	client: reqwest::Client,
-	username: String,
 	auth_token: String,
 }
 
@@ -72,12 +71,16 @@ impl CheckinAPI {
 				token.insert_str(0, "auth=");
 				Ok(Self {
 					client,
-					username: username.to_owned(),
 					auth_token: token,
 				})
 			},
 			None => Err("No auth token set by server".into())
 		}
+	}
+
+	pub fn from_token(auth_token: String) -> Self {
+		let client = reqwest::Client::new();
+		Self { client, auth_token }
 	}
 
 	fn checkin_action(&self, check_in: bool, uuid: &str, tag: &str) -> Result<String, Error> {
@@ -121,15 +124,15 @@ impl CheckinAPI {
 }
 
 #[cfg(test)]
-mod tests {
+mod checkin_api_tests {
 	use super::CheckinAPI;
 
 	#[test]
 	fn login() {
-		let username = env!("USERNAME");
-		let password = env!("PASSWORD");
+		let username = std::env::var("USERNAME").unwrap();
+		let password = std::env::var("PASSWORD").unwrap();
 
-		let instance = CheckinAPI::login(username, password).unwrap();
-		assert_eq!(instance.username, username);
+		let instance = CheckinAPI::login(&username, &password).unwrap();
+		assert!(instance.auth_token.len() == 64);
 	}
 }

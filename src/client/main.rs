@@ -10,6 +10,8 @@ mod api;
 use api::CheckinAPI;
 
 fn main() {
+    let api = CheckinAPI::login("ryan", "test").unwrap();
+
     let ctx = Context::establish(Scope::User).expect("Failed to establish context");
 
     let mut readers_buf = [0; 2048];
@@ -50,7 +52,7 @@ fn main() {
             // Debounce repeated events
             if rs.event_state().intersects(State::PRESENT) {
                 if !readers.get(&name).unwrap_or(&false) {
-                    card_tapped(&ctx, rs.name());
+                    card_tapped(&ctx, rs.name(), &api);
                 }
                 readers.insert(name, true);
             }
@@ -61,7 +63,7 @@ fn main() {
     }
 }
 
-fn card_tapped(ctx: &Context, reader: &std::ffi::CStr) {
+fn card_tapped(ctx: &Context, reader: &std::ffi::CStr, api: &CheckinAPI) {
     // Connect to the card.
     let card = match ctx.connect(reader, ShareMode::Shared, Protocols::ANY) {
         Ok(card) => card,
@@ -77,7 +79,10 @@ fn card_tapped(ctx: &Context, reader: &std::ffi::CStr) {
 
     let badge = badge::NFCBadge::new(&card);
     match badge.get_user_id() {
-        Ok(id) => println!("ID is {}", id),
+        Ok(id) => {
+            let name = api.check_in(&id, "123").unwrap();
+            println!("Checked in {}", name);
+        },
         Err(err) => println!("Error getting user ID: {:?}", err),
     }
 }
