@@ -1,6 +1,5 @@
 use std::fmt;
 use url::Url;
-use serde::Deserialize;
 use serde_json::Value;
 
 pub enum Error {
@@ -106,7 +105,11 @@ impl CheckinAPI {
 			.text()?;
 		let response: Value = serde_json::from_str(&response).or(Err("Invalid JSON response"))?;
 
-		Ok(response["data"][action]["user"]["name"].as_str().unwrap().to_owned())
+		let pointer = format!("/data/{}/user/name", action);
+		match response.pointer(&pointer) {
+			Some(name) => Ok(name.as_str().unwrap().to_owned()),
+			None => Err("Check in failed. Non-existent user ID? Not logged in?".into()),
+		}
 	}
 
 	pub fn check_in(&self, uuid: &str, tag: &str) -> Result<String, Error> {
@@ -114,5 +117,19 @@ impl CheckinAPI {
 	}
 	pub fn check_out(&self, uuid: &str, tag: &str) -> Result<String, Error> {
 		self.checkin_action(false, uuid, tag)
+	}
+}
+
+#[cfg(test)]
+mod tests {
+	use super::CheckinAPI;
+
+	#[test]
+	fn login() {
+		let username = env!("USERNAME");
+		let password = env!("PASSWORD");
+
+		let instance = CheckinAPI::login(username, password).unwrap();
+		assert_eq!(instance.username, username);
 	}
 }
