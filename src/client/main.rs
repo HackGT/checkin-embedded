@@ -7,9 +7,29 @@ extern crate serde_json;
 mod badge;
 mod ndef;
 mod api;
-use api::CheckinAPI;
+use api::{ ManagerAPI, ManagedStatus, CheckinAPI };
+mod crypto;
 
 fn main() {
+    // Bootstrap connection to manager
+    let manager = ManagerAPI::new();
+    match manager.initialize() {
+        Ok(ref status) if *status == ManagedStatus::Authorized => {
+
+        },
+        Ok(ref status) if *status == ManagedStatus::Unauthorized => {
+            eprintln!("Check-in instance <{}> has been denied access in the manager UI", manager.get_name());
+            std::process::exit(1);
+        },
+        Ok(_) => {
+            eprintln!("Check-in instance <{}> must be approved in the manager UI before use", manager.get_name());
+            std::process::exit(1);
+        },
+        Err(err) => {
+            panic!("{:?}", err);
+        }
+    }
+
     let api = CheckinAPI::login("ryan", "test").unwrap();
 
     let ctx = Context::establish(Scope::User).expect("Failed to establish context");
