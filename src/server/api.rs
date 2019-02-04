@@ -1,28 +1,36 @@
 use std::ops::{ Deref, DerefMut };
 use std::io::Read;
-use rocket::{ Request, Data, Outcome };
+use std::net::SocketAddr;
+use rocket::{ Request, Data, Outcome, State };
 use rocket::http::{ Status, ContentType };
 use rocket::data::{ self, FromDataSimple };
 use rocket_contrib::json::JsonValue;
 use serde::{ Serialize, Deserialize };
 use serde::de::DeserializeOwned;
 use ed25519_dalek::{ PublicKey, Signature };
+use mongodb::db::ThreadedDatabase;
+use wither::model::Model;
+use crate::DB;
+use crate::models::Device;
 
 // Implement signature authentication for JSON bodies
 #[derive(Debug)]
-pub struct SignedRequest<T>(pub T);
+pub struct SignedRequest<T> {
+    pub public_key: String,
+    content: T,
+}
 
 impl<T> Deref for SignedRequest<T> {
     type Target = T;
     #[inline(always)]
     fn deref(&self) -> &T {
-        &self.0
+        &self.content
     }
 }
 impl<T> DerefMut for SignedRequest<T> {
     #[inline(always)]
     fn deref_mut(&mut self) -> &mut T {
-        &mut self.0
+        &mut self.content
     }
 }
 
@@ -57,7 +65,12 @@ impl<T: DeserializeOwned> FromDataSimple for SignedRequest<T> {
                     if public_key.is_none() || signature.is_none() {
                         return Outcome::Failure((Status::Unauthorized, SignedRequestError::Invalid));
                     }
+                    // Get DB connection from Rocket request state
+                    let devices = request.guard::<State<DB>>().unwrap().collection("devices");
+                    let result = devices.find_one(Some(doc!{ "name": *public_key.unwrap() }), None);
+
                     // TODO: Check for unauthorized public keys
+                    let raw_public_key = String::from(*public_key.unwrap());
                     let public_key = match hex::decode(public_key.unwrap()) {
                         Ok(key) => key,
                         Err(_) => return Outcome::Failure((Status::Unauthorized, SignedRequestError::Invalid)),
@@ -84,7 +97,7 @@ impl<T: DeserializeOwned> FromDataSimple for SignedRequest<T> {
                     }
                     // Parse JSON
                     match serde_json::from_slice(&body) {
-                        Ok(json) => Outcome::Success(SignedRequest(json)),
+                        Ok(json) => Outcome::Success(SignedRequest { public_key: raw_public_key, content: json }),
                         Err(_) => Outcome::Failure((Status::Unauthorized, SignedRequestError::InvalidBody)),
                     }
                 }
@@ -94,16 +107,51 @@ impl<T: DeserializeOwned> FromDataSimple for SignedRequest<T> {
     }
 }
 
-
 #[derive(Deserialize)]
 pub struct InitializeRequest {
     username: String,
 }
 
 #[post("/initialize", format = "json", data = "<request>")]
-pub fn initialize(request: SignedRequest<InitializeRequest>) -> JsonValue {
-    println!("{}", request.username);
-    json!({
-        "status": "Pending"
-    })
+pub fn initialize(request: SignedRequest<InitializeRequest>, db: State<DB>, remote_addr: SocketAddr) -> Result<JsonValue, mongodb::error::Error> {
+    match Device::find_one(db.clone(), Some(doc! { "public_key": &request.public_key }), None)? {
+        // Device already requested access, return status
+        Some(device) => {
+            let status: &'static str = if device.pending {
+                "Pending"
+            }
+            else if device.authorized && device.credentials_created {
+                "AuthorizedHasCredentials"
+            }
+            else if device.authorized && !device.credentials_created {
+                "AuthorizedNoCredentials"
+            }
+            else {
+                "Unauthorized"
+            };
+            Ok(json!({
+                "status": status
+            }))
+        },
+        // Device is brand new to us
+        None => {
+            let mut device = Device {
+                id: None,
+
+                public_key: request.public_key.clone(),
+                username: request.username.clone(),
+                friendly_name: String::from(&request.username[..16]),
+                ip_address: remote_addr.ip().to_string(),
+
+                authorized: false,
+                pending: true,
+                credentials_created: false,
+            };
+            device.save(db.clone(), None).unwrap();
+
+            Ok(json!({
+                "status": "Pending"
+            }))
+        }
+    }
 }

@@ -153,7 +153,8 @@ struct SignedRequest {
 pub enum ManagedStatus {
 	Pending,
 	Unauthorized,
-	Authorized,
+	AuthorizedHasCredentials,
+	AuthorizedNoCredentials,
 }
 
 pub struct ManagerAPI {

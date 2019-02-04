@@ -3,8 +3,37 @@
 	<head>
 		<title>HackGT Check In Administration</title>
 		<meta charset="utf-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.2/css/bulma.min.css" />
+		<style>
+			table {
+				width: 100%;
+			}
+		</style>
 	</head>
 	<body>
-		<h1>Hello, world!!</h1>
+		<section class="section container">
+			<h1 class="title">HackGT Check-In</h1>
+			<p class="subtitle">Embedded Manager UI</p>
+			<table class="table">
+				<thead>
+					<th>Name</th>
+					<th>IP Address</th>
+					<th>Actions</th>
+				</thead>
+				<tbody>
+					{{#each devices}}
+						<tr>
+							<td title="{{username}}">{{friendly_name}}</td>
+							<td>{{ip_address}}</td>
+						</tr>
+					{{else}}
+						<tr>
+							<td><i>No devices</i></td>
+						</tr>
+					{{/each}}
+				</tbody>
+			</table>
+		</section>
 	</body>
 </html>
