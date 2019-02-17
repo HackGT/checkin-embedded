@@ -1,20 +1,10 @@
 [package]
-name = "checkin-embedded"
+name = "checkin-embedded-client"
 version = "0.1.0"
 authors = ["Ryan Petschek <petschekr@gmail.com>"]
 edition = "2018"
 
-[[bin]]
-name = "client"
-path = "src/client/main.rs"
-
-[[bin]]
-name = "server"
-path = "src/server/main.rs"
-
 [dependencies]
-openssl-sys = "*"
-# Client
 pcsc = "2"
 url = "1.7.2"
 reqwest = "0.9.9"
@@ -25,20 +15,13 @@ rand = "0.6.5"
 hex = "0.3.2"
 crypto-hash = "0.3.3"
 rppal = "0.10.0"
-# Server
-mongodb = "0.3.12"
-wither = "0.8.0"
-wither_derive = "0.8.0"
-rocket = "0.4.0"
+
+openssl-sys = "*"
 
 [dependencies.ed25519-dalek]
 version = "1.0.0-pre.1"
 features = ["serde"]
 
-[dependencies.rocket_contrib]
-version = "0.4.0"
-default-features = false
-features = ["json", "serve", "handlebars_templates"]
-
 [features]
+# Builds OpenSSL independently so that the build succeeds even if OpenSSL library isn't installed for target
 vendored = ["openssl-sys/vendored"]

@@ -9,4 +9,4 @@ export PKG_CONFIG_ALLOW_CROSS=1
 
 export RUSTFLAGS="-ludev"
 
-cargo build --bin client --target=armv7-unknown-linux-gnueabihf --features vendored
+cargo build --target=armv7-unknown-linux-gnueabihf --features vendored
