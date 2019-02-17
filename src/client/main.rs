@@ -9,8 +9,14 @@ mod ndef;
 mod api;
 use api::{ ManagerAPI, ManagedStatus, CheckinAPI };
 mod crypto;
+mod peripherals;
 
 fn main() {
+    // peripherals::alert();
+    let mut display1 = peripherals::HT16K33::new(0x70).unwrap();
+    let mut display2 = peripherals::HT16K33::new(0x71).unwrap();
+    peripherals::HT16K33::scroll_text("Already checked in 15 minutes ago", &mut [display2, display1]).unwrap();
+
     // Bootstrap connection to manager
     let manager = ManagerAPI::new();
     let api: CheckinAPI = match manager.initialize() {

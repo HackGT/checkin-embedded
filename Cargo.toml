@@ -13,6 +13,7 @@ name = "server"
 path = "src/server/main.rs"
 
 [dependencies]
+openssl-sys = "*"
 # Client
 pcsc = "2"
 url = "1.7.2"
@@ -23,6 +24,7 @@ serde_json = "1.0.38"
 rand = "0.6.5"
 hex = "0.3.2"
 crypto-hash = "0.3.3"
+rppal = "0.10.0"
 # Server
 mongodb = "0.3.12"
 wither = "0.8.0"
@@ -37,3 +39,6 @@ features = ["serde"]
 version = "0.4.0"
 default-features = false
 features = ["json", "serve", "handlebars_templates"]
+
+[features]
+vendored = ["openssl-sys/vendored"]
