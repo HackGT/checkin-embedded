@@ -12,34 +12,42 @@ mod crypto;
 mod peripherals;
 
 fn main() {
-    // peripherals::alert();
-    let mut display1 = peripherals::HT16K33::new(0x70).unwrap();
-    let mut display2 = peripherals::HT16K33::new(0x71).unwrap();
-    peripherals::HT16K33::scroll_text("Already checked in 15 minutes ago", &mut [display2, display1]).unwrap();
+    let notifier = peripherals::Notifier::start(0x70, 0x71, 18);
+    notifier.scroll_text("Logging in...", Some(10));
 
     // Bootstrap connection to manager
-    let manager = ManagerAPI::new();
-    let api: CheckinAPI = match manager.initialize() {
-        Ok(ref status) if *status == ManagedStatus::AuthorizedHasCredentials => {
-            // Request
-            CheckinAPI::login("ryan", "test").unwrap()
-        },
-        Ok(ref status) if *status == ManagedStatus::AuthorizedNoCredentials => {
-            // Request credentials from server;
-            CheckinAPI::login("ryan", "test").unwrap()
-        },
-        Ok(ref status) if *status == ManagedStatus::Unauthorized => {
-            eprintln!("Check-in instance <{}> has been denied access in the manager UI", manager.get_name());
-            std::process::exit(1)
-        },
-        Ok(_) => {
-            eprintln!("Check-in instance <{}> must be approved in the manager UI before use", manager.get_name());
-            std::process::exit(1)
-        },
-        Err(err) => {
-            panic!("{:?}", err)
-        }
-    };
+    let api = CheckinAPI::login("ryan", "test").unwrap();
+    // let manager = ManagerAPI::new();
+    // let api: CheckinAPI = match manager.initialize() {
+    //     Ok(ref status) if *status == ManagedStatus::AuthorizedHasCredentials => {
+    //         // Request
+    //         CheckinAPI::login("ryan", "test").unwrap()
+    //     },
+    //     Ok(ref status) if *status == ManagedStatus::AuthorizedNoCredentials => {
+    //         // Request credentials from server;
+    //         CheckinAPI::login("ryan", "test").unwrap()
+    //     },
+    //     Ok(ref status) if *status == ManagedStatus::Unauthorized => {
+    //         eprintln!("Check-in instance <{}> has been denied access in the manager UI", manager.get_name());
+    //         std::process::exit(1)
+    //     },
+    //     Ok(_) => {
+    //         eprintln!("Check-in instance <{}> must be approved in the manager UI before use", manager.get_name());
+    //         std::process::exit(1)
+    //     },
+    //     Err(err) => {
+    //         panic!("{:?}", err)
+    //     }
+    // };
+
+    // Signify that we're logged in and ready to go
+    notifier.flash_multiple(false, vec![500, 200, 100, 0]);
+    notifier.flash_multiple(true, vec![500, 200, 100, 0]);
+    notifier.beep(vec![
+        peripherals::Tone::new(261.63, 500),
+        peripherals::Tone::new(0.0, 200),
+        peripherals::Tone::new(523.25, 100),
+    ]);
 
     let ctx = Context::establish(Scope::User).expect("Failed to establish context");
 
@@ -81,7 +89,7 @@ fn main() {
             // Debounce repeated events
             if rs.event_state().intersects(State::PRESENT) {
                 if !readers.get(&name).unwrap_or(&false) {
-                    card_tapped(&ctx, rs.name(), &api);
+                    card_tapped(&ctx, rs.name(), &api, &notifier);
                 }
                 readers.insert(name, true);
             }
@@ -92,7 +100,7 @@ fn main() {
     }
 }
 
-fn card_tapped(ctx: &Context, reader: &std::ffi::CStr, api: &CheckinAPI) {
+fn card_tapped(ctx: &Context, reader: &std::ffi::CStr, api: &CheckinAPI, notifier: &peripherals::Notifier) {
     // Connect to the card.
     let card = match ctx.connect(reader, ShareMode::Shared, Protocols::ANY) {
         Ok(card) => card,
@@ -107,11 +115,36 @@ fn card_tapped(ctx: &Context, reader: &std::ffi::CStr, api: &CheckinAPI) {
     };
 
     let badge = badge::NFCBadge::new(&card);
+    badge.set_buzzer(false).unwrap();
+
     match badge.get_user_id() {
         Ok(id) => {
-            let name = api.check_in(&id, "123").unwrap();
-            println!("Checked in {}", name);
+            match api.check_in(&id, "123") {
+                Ok(name) => {
+                    notifier.flash(true, 500);
+                    notifier.beep(vec![
+                        peripherals::Tone::new(1046.50, 100),
+                    ]);
+                    println!("Checked in {}", &name);
+                },
+                Err(_err) => {
+                    notifier.flash(false, 500);
+                    notifier.beep(vec![
+                        peripherals::Tone::new(261.63, 500),
+                        peripherals::Tone::new(0.0, 200),
+                        peripherals::Tone::new(261.63, 500),
+                    ]);
+                    notifier.scroll_text("Already checked in 15 minutes ago", None);
+                }
+            };
         },
-        Err(err) => println!("Error getting user ID: {:?}", err),
-    }
+        Err(err) => {
+            println!("Error getting user ID: {:?}", err);
+            notifier.flash_multiple(false, vec![200, 100, 200, 0]);
+            notifier.beep(vec![
+                peripherals::Tone::new(261.63, 500),
+            ]);
+            notifier.scroll_text("Try again", None);
+        }
+    };
 }

@@ -2,6 +2,7 @@ use rppal::i2c::I2c;
 use rppal::i2c::Result;
 use rppal::gpio::Gpio;
 use std::{ thread, time };
+use std::sync::{ Arc, Mutex };
 
 pub struct HT16K33 {
 	device: I2c,
@@ -121,7 +122,6 @@ impl Char {
 	}
 }
 
-
 impl HT16K33 {
 	pub fn new(address: u8) -> Result<Self> {
 		let mut device = I2c::new()?;
@@ -143,7 +143,7 @@ impl HT16K33 {
 		Ok(instance)
 	}
 
-	pub fn scroll_text(text: &str, devices: &mut [HT16K33]) -> Result<()> {
+	pub fn scroll_text(text: &str, devices: &mut [&mut HT16K33], millis_per_column: u64) -> Result<()> {
 		let mut columns: Vec<u8> = Vec::new();
 
 		for character in text.chars() {
@@ -190,8 +190,18 @@ impl HT16K33 {
 			for device in devices.iter_mut() {
 				device.display_buffer()?;
 			}
-			thread::sleep(time::Duration::from_millis(5));
+			thread::sleep(time::Duration::from_millis(millis_per_column));
 		}
+		Ok(())
+	}
+
+	pub fn all_on(&mut self) -> Result<()> {
+		for x in 0..8 {
+			for y in 0..8 {
+				self.set_pixel(x, y, true);
+			}
+		}
+		self.display_buffer()?;
 		Ok(())
 	}
 
@@ -236,26 +246,105 @@ impl HT16K33 {
 	}
 }
 
-fn beep(pitch: u64, count: u32) {
-	let gpio = Gpio::new().unwrap();
-	let mut pin = gpio.get(18).unwrap().into_output();
-
-	let mut counter = 0;
-	loop {
-		if counter > count {
-			break;
-		}
-		counter += 1;
-
-		pin.set_high();
-		thread::sleep(time::Duration::from_micros(pitch));
-		pin.set_low();
-		thread::sleep(time::Duration::from_micros(pitch));
+pub struct Tone {
+	frequency: f64,
+	duration: time::Duration,
+}
+impl Tone {
+	pub fn new(frequency: f64, millis: u64) -> Self {
+		Self { frequency, duration: time::Duration::from_millis(millis) }
 	}
-	pin.set_low();
 }
 
-pub fn alert() {
-	beep(1500, 100);
-	beep(500, 150);
+/// Spawns threads to control peripherals without blocking the main thread
+pub struct Notifier {
+	success_display: Arc<Mutex<HT16K33>>,
+	error_display: Arc<Mutex<HT16K33>>,
+	buzzer: Arc<Mutex<rppal::gpio::OutputPin>>,
+}
+impl Notifier {
+	pub fn start(success_display_address: u8, error_display_address: u8, buzzer_pin: u8) -> Self {
+		let success_display = Arc::new(Mutex::new(HT16K33::new(success_display_address).unwrap()));
+        let error_display = Arc::new(Mutex::new(HT16K33::new(error_display_address).unwrap()));
+
+		let gpio = Gpio::new().unwrap();
+		let buzzer = gpio.get(buzzer_pin).unwrap().into_output();
+		let buzzer = Arc::new(Mutex::new(buzzer));
+
+		Self {
+			success_display,
+			error_display,
+			buzzer,
+		}
+	}
+
+	pub fn scroll_text(&self, text: &str, millis_per_column: Option<u64>) {
+		let success_display = Arc::clone(&self.success_display);
+		let error_display = Arc::clone(&self.error_display);
+		let text = text.to_owned();
+		let millis_per_column = millis_per_column.unwrap_or(5); // A speedy yet readable default
+		thread::spawn(move || {
+			let mut success_display = success_display.lock().unwrap();
+			let mut error_display = error_display.lock().unwrap();
+
+			// List goes right to left
+			HT16K33::scroll_text(&text, &mut [&mut *error_display, &mut *success_display], millis_per_column).unwrap();
+		});
+	}
+
+	pub fn flash(&self, success: bool, duration: u64) {
+		let display = if success { &self.success_display } else { &self.error_display };
+		let display = Arc::clone(&display);
+		thread::spawn(move || {
+			let mut display = display.lock().unwrap();
+
+			display.all_on().unwrap();
+			thread::sleep(time::Duration::from_millis(duration));
+			display.clear().unwrap();
+		});
+	}
+
+	pub fn flash_multiple(&self, success: bool, durations: Vec<u64>) {
+		let display = if success { &self.success_display } else { &self.error_display };
+		let display = Arc::clone(&display);
+		thread::spawn(move || {
+			let mut display = display.lock().unwrap();
+
+			let mut is_on = false;
+			for duration in durations.iter() {
+				if is_on {
+					display.clear().unwrap();
+				}
+				else {
+					display.all_on().unwrap();
+				}
+				is_on = !is_on;
+				thread::sleep(time::Duration::from_millis(*duration));
+			}
+		});
+	}
+
+	pub fn beep(&self, tones: Vec<Tone>) {
+		let buzzer = Arc::clone(&self.buzzer);
+		thread::spawn(move || {
+			let mut buzzer = buzzer.lock().unwrap();
+
+			for tone in tones.iter() {
+				let mut start = time::Instant::now();
+				if tone.frequency == 0.0 {
+					thread::sleep(tone.duration);
+				}
+				else {
+					let microseconds = (1.0 / tone.frequency) * 1000.0 * 1000.0;
+
+					while start.elapsed() < tone.duration {
+						buzzer.set_high();
+						thread::sleep(time::Duration::from_micros(microseconds as u64));
+						buzzer.set_low();
+						thread::sleep(time::Duration::from_micros(microseconds as u64));
+					}
+				}
+			}
+		});
+	}
 }
