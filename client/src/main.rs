@@ -1,9 +1,7 @@
 use std::collections::HashMap;
 use pcsc::*;
 use hackgt_nfc::api::CheckinAPI;
-
-#[macro_use]
-extern crate serde_json;
+use chrono::DateTime;
 
 mod badge;
 mod ndef;
@@ -143,7 +141,8 @@ fn card_tapped(ctx: &Context, reader: &std::ffi::CStr, api: &CheckinAPI, notifie
                             peripherals::Tone::new(261.63, 500),
                         ]);
                         if let Some(last_checkin) = tag.last_successful_checkin {
-                            notifier.scroll_text(&last_checkin.checked_in_date);
+                            let time = get_relative_time(&last_checkin.checked_in_date);
+                            notifier.scroll_text(&time);
                         }
                         else {
                             notifier.scroll_text("Already checked in");
@@ -179,4 +178,35 @@ fn card_tapped(ctx: &Context, reader: &std::ffi::CStr, api: &CheckinAPI, notifie
             notifier.scroll_text("Try again");
         }
     };
+}
+
+fn get_relative_time(iso_time: &str) -> String {
+    let time = match DateTime::parse_from_rfc3339(iso_time) {
+        Ok(time) => time,
+        Err(err) => return String::from("invalid time ago"),
+    };
+    let now = chrono::Local::now();
+    let duration = now.signed_duration_since(time);
+
+    fn pluralizer(num: i64, label: &str) -> String {
+        format!("{} {}{} ago", num, label, if num == 1 { "s" } else { "" })
+    }
+
+    let weeks = duration.num_weeks();
+    if weeks > 0 {
+        return pluralizer(weeks, "week");
+    }
+    let days = duration.num_days();
+    if days > 0 {
+        return pluralizer(days, "day");
+    }
+    let hours = duration.num_hours();
+    if hours > 0 {
+        return pluralizer(hours, "hour");
+    }
+    let minutes = duration.num_minutes();
+    if minutes > 0 {
+        return pluralizer(minutes, "minute");
+    }
+    pluralizer(duration.num_seconds(), "second")
 }
