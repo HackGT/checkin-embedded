@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use pcsc::*;
+use hackgt_nfc::api::CheckinAPI;
 
 #[macro_use]
 extern crate serde_json;
@@ -7,13 +8,13 @@ extern crate serde_json;
 mod badge;
 mod ndef;
 mod api;
-use api::{ ManagerAPI, ManagedStatus, CheckinAPI };
+use api::{ ManagerAPI, ManagedStatus };
 mod crypto;
 mod peripherals;
 
 fn main() {
     let notifier = peripherals::Notifier::start(0x70, 0x71, 18);
-    notifier.scroll_text("Logging in...", Some(10));
+    notifier.scroll_text_speed("Logging in...", 10);
 
     // Bootstrap connection to manager
     let api = CheckinAPI::login("ryan", "test").unwrap();
@@ -117,15 +118,46 @@ fn card_tapped(ctx: &Context, reader: &std::ffi::CStr, api: &CheckinAPI, notifie
     let badge = badge::NFCBadge::new(&card);
     badge.set_buzzer(false).unwrap();
 
+    // THIS IS SLOWWWWW
+    // My 3:40am guess is that the notifier is causing some kind of hold on the &card argument
+    // fake news
+    // my 3:42am knowledges says that this is somehow the cause:
+    // badge.get_user_id().unwrap();
+
     match badge.get_user_id() {
         Ok(id) => {
             match api.check_in(&id, "123") {
-                Ok(name) => {
-                    notifier.flash(true, 500);
+                Ok((success, user, tag)) => {
+                    if success {
+                        notifier.flash(true, 500);
+                        notifier.beep(vec![
+                            peripherals::Tone::new(1046.50, 100),
+                        ]);
+                        println!("Checked in {}", &user.name);
+                    }
+                    else {
+                        notifier.flash(false, 500);
+                        notifier.beep(vec![
+                            peripherals::Tone::new(261.63, 500),
+                            peripherals::Tone::new(0.0, 200),
+                            peripherals::Tone::new(261.63, 500),
+                        ]);
+                        if let Some(last_checkin) = tag.last_successful_checkin {
+                            notifier.scroll_text(&last_checkin.checked_in_date);
+                        }
+                        else {
+                            notifier.scroll_text("Already checked in");
+                        }
+                    }
+                },
+                Err(hackgt_nfc::api::Error::Message("Invalid user ID on badge")) => {
+                    notifier.flash(false, 500);
                     notifier.beep(vec![
-                        peripherals::Tone::new(1046.50, 100),
+                        peripherals::Tone::new(261.63, 500),
+                        peripherals::Tone::new(0.0, 200),
+                        peripherals::Tone::new(261.63, 500),
                     ]);
-                    println!("Checked in {}", &name);
+                    notifier.scroll_text("Invalid user ID on badge");
                 },
                 Err(_err) => {
                     notifier.flash(false, 500);
@@ -134,7 +166,7 @@ fn card_tapped(ctx: &Context, reader: &std::ffi::CStr, api: &CheckinAPI, notifie
                         peripherals::Tone::new(0.0, 200),
                         peripherals::Tone::new(261.63, 500),
                     ]);
-                    notifier.scroll_text("Already checked in 15 minutes ago", None);
+                    notifier.scroll_text("API error");
                 }
             };
         },
@@ -144,7 +176,7 @@ fn card_tapped(ctx: &Context, reader: &std::ffi::CStr, api: &CheckinAPI, notifie
             notifier.beep(vec![
                 peripherals::Tone::new(261.63, 500),
             ]);
-            notifier.scroll_text("Try again", None);
+            notifier.scroll_text("Try again");
         }
     };
 }

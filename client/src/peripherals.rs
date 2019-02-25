@@ -278,11 +278,15 @@ impl Notifier {
 		}
 	}
 
-	pub fn scroll_text(&self, text: &str, millis_per_column: Option<u64>) {
+	pub fn scroll_text(&self, text: &str) {
+		const SPEED: u64 = 5; // A speedy yet readable default
+		self.scroll_text_speed(text, SPEED);
+	}
+
+	pub fn scroll_text_speed(&self, text: &str, millis_per_column: u64) {
 		let success_display = Arc::clone(&self.success_display);
 		let error_display = Arc::clone(&self.error_display);
 		let text = text.to_owned();
-		let millis_per_column = millis_per_column.unwrap_or(5); // A speedy yet readable default
 		thread::spawn(move || {
 			let mut success_display = success_display.lock().unwrap();
 			let mut error_display = error_display.lock().unwrap();
