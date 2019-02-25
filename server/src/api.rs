@@ -5,11 +5,11 @@ use rocket::{ Request, Data, Outcome, State };
 use rocket::http::{ Status, ContentType };
 use rocket::data::{ self, FromDataSimple };
 use rocket_contrib::json::JsonValue;
-use serde::{ Serialize, Deserialize };
+use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use ed25519_dalek::{ PublicKey, Signature };
-use mongodb::db::ThreadedDatabase;
 use wither::model::Model;
+use hackgt_nfc::api::CheckinAPI;
 use crate::DB;
 use crate::models::Device;
 
@@ -66,8 +66,8 @@ impl<T: DeserializeOwned> FromDataSimple for SignedRequest<T> {
                         return Outcome::Failure((Status::Unauthorized, SignedRequestError::Invalid));
                     }
                     // Get DB connection from Rocket request state
-                    let devices = request.guard::<State<DB>>().unwrap().collection("devices");
-                    let result = devices.find_one(Some(doc!{ "name": *public_key.unwrap() }), None);
+                    // let devices = request.guard::<State<DB>>().unwrap().collection("devices");
+                    // let result = devices.find_one(Some(doc!{ "name": *public_key.unwrap() }), None);
 
                     // TODO: Check for unauthorized public keys
                     let raw_public_key = String::from(*public_key.unwrap());
@@ -153,5 +153,39 @@ pub fn initialize(request: SignedRequest<InitializeRequest>, db: State<DB>, remo
                 "status": "Pending"
             }))
         }
+    }
+}
+
+#[derive(Deserialize)]
+pub struct CredentialsRequest {
+    username: String,
+    password: String,
+}
+
+#[post("/credentials", format = "json", data = "<request>")]
+pub fn create_credentials(request: SignedRequest<CredentialsRequest>, db: State<DB>, checkin_api: State<CheckinAPI>) -> Result<JsonValue, mongodb::error::Error> {
+    match Device::find_one(db.clone(), Some(doc! { "public_key": &request.public_key }), None)? {
+        Some(ref device) if !device.pending && device.authorized => {
+            if device.credentials_created {
+                return Ok(json!({
+                    "error": "Credentials already created"
+                }));
+            }
+            let response = match checkin_api.add_user(&request.username, &request.password) {
+                Ok(_) => json!({
+                    "success": true,
+                }),
+                Err(err) => json!({
+                    "error": "Failed to create user with credentials",
+                    "details": format!("{:?}", err),
+                }),
+            };
+            Ok(response)
+        },
+        _ => {
+            Ok(json!({
+                "error": "Unauthorized device"
+            }))
+        },
     }
 }

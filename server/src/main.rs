@@ -8,9 +8,9 @@ use rocket::State;
 use rocket_contrib::serve::StaticFiles;
 use rocket_contrib::templates::Template;
 
-use std::collections::HashMap;
 use mongodb::{ThreadedClient, doc};
 use wither::model::Model;
+use hackgt_nfc::api::CheckinAPI;
 
 pub type DB = std::sync::Arc<mongodb::db::DatabaseInner>;
 
@@ -32,6 +32,16 @@ fn index(db: State<DB>) -> Template {
 }
 
 fn main() {
+	println!("Logging into HackGT Check-In API...");
+	let checkin_api = match std::env::var("CHECKIN_TOKEN") {
+		Ok(token) => CheckinAPI::from_token(token),
+		Err(_) => {
+			let username = std::env::var("CHECKIN_USERNAME").expect("Missing or invalid check-in API username");
+			let password = std::env::var("CHECKIN_PASSWORD").expect("Missing or invalid check-in API password");
+			CheckinAPI::login(&username, &password).unwrap()
+		}
+	};
+
 	let mongo_url = std::env::var("MONGO_URL").unwrap_or("mongodb://localhost".to_owned());
 	let db_name = std::env::var("MONGO_DB").unwrap_or("checkin-embedded".to_owned());
 	let db = mongodb::Client::with_uri(&mongo_url).expect("Failed to connect to the MongoDB server").db(&db_name);
@@ -42,5 +52,6 @@ fn main() {
 		.mount("/api", routes![api::initialize])
 		.mount("/css", StaticFiles::from("/ui/css"))
 		.manage(db)
+		.manage(checkin_api)
 		.launch();
 }

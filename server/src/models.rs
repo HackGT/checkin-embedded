@@ -1,4 +1,3 @@
-use wither::prelude::Model;
 use serde::{ Serialize, Deserialize };
 use mongodb::{
 	coll::options::IndexModel,
