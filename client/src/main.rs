@@ -15,29 +15,48 @@ fn main() {
     notifier.scroll_text_speed("Logging in...", 10);
 
     // Bootstrap connection to manager
-    let api = CheckinAPI::login("ryan", "test").unwrap();
-    // let manager = ManagerAPI::new();
-    // let api: CheckinAPI = match manager.initialize() {
-    //     Ok(ref status) if *status == ManagedStatus::AuthorizedHasCredentials => {
-    //         // Request
-    //         CheckinAPI::login("ryan", "test").unwrap()
-    //     },
-    //     Ok(ref status) if *status == ManagedStatus::AuthorizedNoCredentials => {
-    //         // Request credentials from server;
-    //         CheckinAPI::login("ryan", "test").unwrap()
-    //     },
-    //     Ok(ref status) if *status == ManagedStatus::Unauthorized => {
-    //         eprintln!("Check-in instance <{}> has been denied access in the manager UI", manager.get_name());
-    //         std::process::exit(1)
-    //     },
-    //     Ok(_) => {
-    //         eprintln!("Check-in instance <{}> must be approved in the manager UI before use", manager.get_name());
-    //         std::process::exit(1)
-    //     },
-    //     Err(err) => {
-    //         panic!("{:?}", err)
-    //     }
-    // };
+    let manager = ManagerAPI::new();
+    let signer = crypto::Signer::load();
+    let api: CheckinAPI = match manager.initialize() {
+        Ok(ref status) if *status == ManagedStatus::AuthorizedHasCredentials => {
+            // Use existing credentials
+            let credentials = signer.get_api_credentials();
+            match CheckinAPI::login(&credentials.username, &credentials.password) {
+                Ok(api) => api,
+                // This can happen if someone accidentally deletes our account in the checkin2 admin page
+                Err(hackgt_nfc::api::Error::Message("Invalid username or password")) => {
+                    let response = manager.create_credentials().unwrap();
+                    if !response.success {
+                        eprintln!("Invalid credentials even though server thinks we already have an account: {:?} ({:?})", response.error, response.details);
+                        std::process::exit(1);
+                    }
+                    CheckinAPI::login(&credentials.username, &credentials.password).expect("Invalid credentials after server apparently created our account again")
+                },
+                Err(err) => panic!(err),
+            }
+        },
+        Ok(ref status) if *status == ManagedStatus::AuthorizedNoCredentials => {
+            // Request server create an account with our credentials
+            let response = manager.create_credentials().unwrap();
+            if !response.success {
+                eprintln!("Failed to create credentials: {:?} ({:?})", response.error, response.details);
+                std::process::exit(1);
+            }
+            let credentials = signer.get_api_credentials();
+            CheckinAPI::login(&credentials.username, &credentials.password).expect("Invalid credentials after server apparently created our account")
+        },
+        Ok(ref status) if *status == ManagedStatus::Unauthorized => {
+            eprintln!("Check-in instance <{}> has been denied access in the manager UI", manager.get_name());
+            std::process::exit(1)
+        },
+        Ok(_) => {
+            eprintln!("Check-in instance <{}> must be approved in the manager UI before use", manager.get_name());
+            std::process::exit(1)
+        },
+        Err(err) => {
+            panic!("{:?}", err)
+        }
+    };
 
     // Signify that we're logged in and ready to go
     notifier.flash_multiple(false, vec![500, 200, 100, 0]);

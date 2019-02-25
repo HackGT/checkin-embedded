@@ -165,16 +165,24 @@ pub struct CredentialsRequest {
 #[post("/credentials", format = "json", data = "<request>")]
 pub fn create_credentials(request: SignedRequest<CredentialsRequest>, db: State<DB>, checkin_api: State<CheckinAPI>) -> Result<JsonValue, mongodb::error::Error> {
     match Device::find_one(db.clone(), Some(doc! { "public_key": &request.public_key }), None)? {
-        Some(ref device) if !device.pending && device.authorized => {
-            if device.credentials_created {
+        Some(device) => {
+            if device.pending || !device.authorized {
                 return Ok(json!({
-                    "error": "Credentials already created"
+                    "error": "Unauthorized or pending device"
                 }));
             }
             let response = match checkin_api.add_user(&request.username, &request.password) {
-                Ok(_) => json!({
-                    "success": true,
-                }),
+                Ok(_) => {
+                    device.update(
+                        db.clone(),
+                        Some(doc! { "public_key": &request.public_key }),
+                        doc! { "$set": { "credentials_created": true } },
+                        None
+                    )?;
+                    json!({
+                        "success": true,
+                    })
+                },
                 Err(err) => json!({
                     "error": "Failed to create user with credentials",
                     "details": format!("{:?}", err),
@@ -184,7 +192,7 @@ pub fn create_credentials(request: SignedRequest<CredentialsRequest>, db: State<
         },
         _ => {
             Ok(json!({
-                "error": "Unauthorized device"
+                "error": "Unknown device"
             }))
         },
     }

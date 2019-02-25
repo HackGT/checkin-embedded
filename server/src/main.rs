@@ -49,7 +49,10 @@ fn main() {
 	rocket::ignite()
 		.attach(Template::fairing())
 		.mount("/", routes![index])
-		.mount("/api", routes![api::initialize])
+		.mount("/api", routes![
+			api::initialize,
+			api::create_credentials,
+		])
 		.mount("/css", StaticFiles::from("/ui/css"))
 		.manage(db)
 		.manage(checkin_api)

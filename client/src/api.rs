@@ -40,6 +40,12 @@ pub enum ManagedStatus {
 	AuthorizedHasCredentials,
 	AuthorizedNoCredentials,
 }
+#[derive(Debug)]
+pub struct CredentialResponse {
+	pub success: bool,
+	pub error: Option<String>,
+	pub details: Option<String>,
+}
 
 pub struct ManagerAPI {
 	base_url: Url,
@@ -50,7 +56,7 @@ pub struct ManagerAPI {
 impl ManagerAPI {
 	#[cfg(debug_assertions)]
 	fn base_url() -> &'static str {
-		"http://localhost:3000"
+		"http://192.168.1.15:3000"
 	}
 	#[cfg(not(debug_assertions))]
 	fn base_url() -> &'static str {
@@ -100,6 +106,38 @@ impl ManagerAPI {
 			.body(signed_request.body)
 			.send()?
 			.json()?;
-		Ok(dbg!(response.status))
+		Ok(response.status)
+	}
+
+	pub fn create_credentials(&self) -> Result<CredentialResponse, Error> {
+		#[derive(Serialize)]
+		struct Request<'a> {
+			username: &'a str,
+			password: &'a str,
+		}
+		#[derive(Deserialize)]
+		struct Response {
+			success: Option<bool>,
+			error: Option<String>,
+			details: Option<String>,
+		}
+		let credentials = self.signer.get_api_credentials();
+		let request = Request {
+			username: &credentials.username,
+			password: &credentials.password,
+		};
+		let signed_request = self.sign_request(&request);
+
+		let response: Response = self.client.post(self.base_url.join("/api/credentials").unwrap())
+			.header(signed_request.header_name, signed_request.header_value)
+			.header(reqwest::header::CONTENT_TYPE, HeaderValue::from_static("application/json"))
+			.body(signed_request.body)
+			.send()?
+			.json()?;
+		Ok(CredentialResponse {
+			success: response.success.unwrap_or(false),
+			error: response.error,
+			details: response.details,
+		})
 	}
 }
