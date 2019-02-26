@@ -1,6 +1,7 @@
 use hackgt_nfc::api::CheckinAPI;
 use hackgt_nfc::nfc::handle_cards;
 use chrono::DateTime;
+use std::sync::Arc;
 
 mod badge;
 mod ndef;
@@ -10,7 +11,9 @@ mod crypto;
 mod peripherals;
 
 fn main() {
-    let notifier = peripherals::Notifier::start(0x70, 0x71, 18);
+    // We'll be using this notifer on the main thread + the tag update thread so it needs to be behind an Arc
+    let notifier_arc = Arc::new(peripherals::Notifier::start(0x70, 0x71, 18));
+    let notifier = notifier_arc.clone();
     notifier.scroll_text_speed("Logging in...", 10);
 
     // Bootstrap connection to manager
@@ -53,9 +56,11 @@ fn main() {
             std::process::exit(1)
         },
         Err(err) => {
-            panic!("{:?}", err)
+            panic!(err)
         }
     };
+    // Spawns a thread to check for tag updates
+    manager.start_polling_for_tag(30, notifier_arc.clone());
 
     // Signify that we're logged in and ready to go
     notifier.flash_multiple(false, vec![500, 200, 100, 0]);
@@ -71,6 +76,9 @@ fn main() {
         let badge = badge::NFCBadge::new(&card);
         badge.set_buzzer(false).unwrap();
 
+        let current_tag = Arc::clone(&manager.current_tag);
+        let current_tag = current_tag.read().unwrap();
+
         // THIS IS SLOWWWWW
         // My 3:40am guess is that the notifier is causing some kind of hold on the &card argument
         // fake news
@@ -78,6 +86,13 @@ fn main() {
         // badge.get_user_id().unwrap();
 
         match badge.get_user_id() {
+            Ok(_) if current_tag.is_none() => {
+                notifier.flash_multiple(false, vec![200, 100, 200, 0]);
+                notifier.beep(vec![
+                    peripherals::Tone::new(261.63, 500),
+                ]);
+                notifier.scroll_text("No check-in tag defined by manager");
+            },
             Ok(id) => {
                 match api.check_in(&id, "123") {
                     Ok((success, user, tag)) => {
@@ -146,7 +161,7 @@ fn get_relative_time(iso_time: &str) -> String {
     let duration = now.signed_duration_since(time);
 
     fn pluralizer(num: i64, label: &str) -> String {
-        format!("{} {}{} ago", num, label, if num == 1 { "s" } else { "" })
+        format!("{} {}{} ago", num, label, if num == 1 { "" } else { "s" })
     }
 
     let weeks = duration.num_weeks();

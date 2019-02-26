@@ -1,8 +1,11 @@
 use std::fmt;
+use std::{ thread, time };
+use std::sync::{ Arc, RwLock };
 use url::Url;
 use serde::{ Serialize, Deserialize };
 use reqwest::header::{ HeaderName, HeaderValue };
 use crate::crypto::Signer;
+use crate::peripherals::Notifier;
 
 pub enum Error {
 	Network(reqwest::Error),
@@ -47,10 +50,12 @@ pub struct CredentialResponse {
 	pub details: Option<String>,
 }
 
+#[derive(Clone)]
 pub struct ManagerAPI {
 	base_url: Url,
 	client: reqwest::Client,
 	signer: Signer,
+	pub current_tag: Arc<RwLock<Option<String>>>,
 }
 
 impl ManagerAPI {
@@ -66,7 +71,12 @@ impl ManagerAPI {
 	pub fn new() -> Self {
 		let client = reqwest::Client::new();
 		let base_url = Url::parse(ManagerAPI::base_url()).expect("Invalid base URL configured");
-		Self { base_url, client, signer: Signer::load() }
+		Self {
+			base_url,
+			client,
+			signer: Signer::load(),
+			current_tag: Arc::new(RwLock::new(None)),
+		}
 	}
 
 	fn sign_request<T: Serialize + ?Sized>(&self, request: &T) -> SignedRequest {
@@ -139,5 +149,56 @@ impl ManagerAPI {
 			error: response.error,
 			details: response.details,
 		})
+	}
+
+	pub fn get_tag(&self) -> Result<Option<String>, Error> {
+		#[derive(Serialize)]
+		struct Request<'a> {
+			username: &'a str,
+		}
+		#[derive(Deserialize)]
+		struct Response {
+			current: Option<String>,
+			all: Vec<String>,
+		}
+		let credentials = self.signer.get_api_credentials();
+		let request = Request {
+			username: &credentials.username
+		};
+		let response: Response = self.client.get(self.base_url.join("/api/tag").unwrap())
+			.query(&request)
+			.send()?
+			.json()?;
+		Ok(response.current)
+	}
+
+	pub fn start_polling_for_tag(&self, seconds: u64, notifier: Arc<Notifier>) {
+		// Spawn a thread that checks for current check-in tag
+		let thread_instance = self.clone();
+		let current_tag = Arc::clone(&self.current_tag);
+		thread::spawn(move || {
+			loop {
+				match ManagerAPI::get_tag(&thread_instance) {
+					Ok(Some(new_tag)) => {
+						let mut tag = current_tag.write().unwrap();
+						// Only update if changed
+						if tag.is_none() || tag.as_ref().unwrap() != &new_tag {
+							*tag = Some(new_tag);
+							notifier.scroll_text(&format!("Using tag: {}", tag.as_ref().unwrap()));
+						}
+					},
+					Ok(None) => {
+						let mut tag = current_tag.write().unwrap();
+						// Only update if newly null
+						if tag.is_some() {
+							*tag = None;
+							notifier.scroll_text_speed("No tag defined by manager", 15);
+						}
+					},
+					Err(err) => println!("Tag check thread: {:?}", err)
+				}
+				thread::sleep(time::Duration::from_secs(seconds));
+			}
+		});
 	}
 }

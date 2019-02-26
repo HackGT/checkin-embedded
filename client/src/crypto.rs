@@ -52,3 +52,9 @@ impl Signer {
 		}
 	}
 }
+
+impl std::clone::Clone for Signer {
+	fn clone(&self) -> Self {
+		Signer::load()
+	}
+}
