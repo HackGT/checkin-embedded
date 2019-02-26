@@ -12,8 +12,11 @@ pub struct HT16K33 {
 const HT16K33_BLINK_CMD: u8       = 0x80;
 const HT16K33_BLINK_DISPLAYON: u8 = 0x01;
 const HT16K33_BLINK_OFF: u8       = 0x00;
+#[allow(dead_code)]
 const HT16K33_BLINK_2HZ: u8       = 0x02;
+#[allow(dead_code)]
 const HT16K33_BLINK_1HZ: u8       = 0x04;
+#[allow(dead_code)]
 const HT16K33_BLINK_HALFHZ: u8    = 0x06;
 const HT16K33_SYSTEM_SETUP: u8    = 0x20;
 const HT16K33_OSCILLATOR: u8      = 0x01;
@@ -334,7 +337,7 @@ impl Notifier {
 			let mut buzzer = buzzer.lock().unwrap();
 
 			for tone in tones.iter() {
-				let mut start = time::Instant::now();
+				let start = time::Instant::now();
 				if tone.frequency == 0.0 {
 					thread::sleep(tone.duration);
 				}
