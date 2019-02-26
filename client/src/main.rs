@@ -49,10 +49,15 @@ fn main() {
         },
         Ok(ManagedStatus::Unauthorized) => {
             eprintln!("Check-in instance <{}> has been denied access in the manager UI", manager.get_name());
+            notifier.scroll_text("Denied access in manager UI");
+            std::thread::sleep(std::time::Duration::from_secs(30));
             std::process::exit(1)
         },
         Ok(ManagedStatus::Pending) => {
             eprintln!("Check-in instance <{}> must be approved in the manager UI before use", manager.get_name());
+            notifier.scroll_text("Must approve device in manager UI before use");
+            notifier.scroll_text_speed("Exiting...", 30);
+            std::thread::sleep(std::time::Duration::from_secs(30));
             std::process::exit(1)
         },
         Err(err) => {
