@@ -146,6 +146,8 @@ pub fn initialize(request: SignedRequest<InitializeRequest>, db: State<DB>, remo
                 authorized: false,
                 pending: true,
                 credentials_created: false,
+
+                current_tag: None,
             };
             device.save(db.clone(), None).unwrap();
 
@@ -196,4 +198,20 @@ pub fn create_credentials(request: SignedRequest<CredentialsRequest>, db: State<
             }))
         },
     }
+}
+
+#[get("/tag?<username>")]
+pub fn get_tag(username: Option<String>, db: State<DB>, checkin_api: State<CheckinAPI>) -> Result<JsonValue, mongodb::error::Error> {
+    let mut tags = checkin_api.get_tags_names(false).unwrap_or(Vec::new());
+    tags.sort();
+
+    let current_tag: Option<String> = match username {
+        Some(username) => Device::find_one(db.clone(), Some(doc! { "username": &username }), None)?.and_then(|device| device.current_tag),
+        None => None
+    };
+
+    Ok(json!({
+        "current": current_tag,
+        "all": tags,
+    }))
 }

@@ -52,6 +52,7 @@ fn main() {
 		.mount("/api", routes![
 			api::initialize,
 			api::create_credentials,
+			api::get_tag,
 		])
 		.mount("/css", StaticFiles::from("/ui/css"))
 		.manage(db)

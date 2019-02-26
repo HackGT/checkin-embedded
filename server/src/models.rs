@@ -20,4 +20,6 @@ pub struct Device {
 	pub authorized: bool,
 	pub pending: bool,
 	pub credentials_created: bool,
+
+	pub current_tag: Option<String>,
 }
