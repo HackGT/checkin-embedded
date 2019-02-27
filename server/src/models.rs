@@ -23,3 +23,12 @@ pub struct Device {
 
 	pub current_tag: Option<String>,
 }
+
+#[derive(Model, Serialize, Deserialize)]
+pub struct User {
+	#[serde(rename="_id", skip_serializing_if="Option::is_none")]
+    pub id: Option<ObjectId>,
+
+	pub username: String,
+	pub auth_token: String,
+}

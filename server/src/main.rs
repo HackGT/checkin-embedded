@@ -17,9 +17,11 @@ pub type DB = std::sync::Arc<mongodb::db::DatabaseInner>;
 mod models;
 use models::Device;
 mod api;
+mod auth;
+use auth::AuthenticatedUser;
 
 #[get("/")]
-fn index(db: State<DB>) -> Template {
+fn index(user: AuthenticatedUser, db: State<DB>) -> Template {
 	let devices = match Device::find(db.clone(), None, None) {
 		Ok(result) => result,
 		// Driver returns an error if no documents are found
@@ -49,12 +51,20 @@ fn main() {
 	rocket::ignite()
 		.attach(Template::fairing())
 		.mount("/", routes![index])
+		.mount("/auth", routes![
+			auth::login,
+			auth::process_login
+		])
 		.mount("/api", routes![
 			api::initialize,
 			api::create_credentials,
 			api::get_tag,
 		])
 		.mount("/css", StaticFiles::from("/ui/css"))
+		.mount("/js", StaticFiles::from("/ui/js"))
+		.register(catchers![
+			auth::unauthorized_redirect
+		])
 		.manage(db)
 		.manage(checkin_api)
 		.launch();
