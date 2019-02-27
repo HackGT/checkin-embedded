@@ -69,3 +69,26 @@ setupButtonHandlers("action-delete", async id => {
 		alert(`${response.error} (${response.details || "No details"})`);
 	}
 });
+
+let selects = document.getElementsByClassName("tag-select") as HTMLCollectionOf<HTMLSelectElement>;
+for (let i = 0; i < selects.length; i++) {
+	selects[i].addEventListener("change", async e => {
+		let select = e.target as HTMLButtonElement;
+		let deviceUsername = select.dataset.username;
+		if (deviceUsername) {
+			select.disabled = true;
+			let response: APIResponse = await fetch("/api/device/set-tag", {
+				method: "POST",
+				credentials: "include",
+				headers: {
+					"Content-Type": "application/json"
+				},
+				body: JSON.stringify({ username: deviceUsername, tag: select.value })
+			}).then(response => response.json());
+			if (!response.success) {
+				alert(`${response.error} (${response.details || "No details"})`);
+			}
+			select.disabled = false;
+		}
+	});
+}

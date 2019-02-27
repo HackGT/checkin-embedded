@@ -345,3 +345,34 @@ pub fn delete_device(request: Json<DeviceButtonAction>, db: State<DB>, checkin_a
     };
     Ok(response)
 }
+
+#[derive(Deserialize)]
+pub struct DeviceTagAction {
+    username: String,
+    tag: String,
+}
+#[post("/device/set-tag", format = "json", data = "<request>")]
+pub fn set_tag(request: Json<DeviceTagAction>, db: State<DB>) -> Result<JsonValue, mongodb::error::Error> {
+    let response = match Device::find_one(db.clone(), Some(doc! { "username": &request.username }), None)? {
+        Some(device) => {
+            device.update(
+                db.clone(),
+                None,
+                doc! { "$set": {
+                    "current_tag": request.tag.clone(),
+                } },
+                None
+            )?;
+            json!({
+                "success": true,
+            })
+        },
+        None => {
+            json!({
+                "success": false,
+                "error": "Device not found",
+            })
+        }
+    };
+    Ok(response)
+}

@@ -8,7 +8,8 @@ use rocket::State;
 use rocket_contrib::serve::StaticFiles;
 use rocket_contrib::templates::Template;
 
-use mongodb::{ThreadedClient, doc};
+use serde::Serialize;
+use mongodb::{ ThreadedClient, doc };
 use wither::model::Model;
 use hackgt_nfc::api::CheckinAPI;
 
@@ -21,15 +22,36 @@ mod auth;
 use auth::AuthenticatedUser;
 
 #[get("/")]
-fn index(user: AuthenticatedUser, db: State<DB>) -> Template {
+fn index(user: AuthenticatedUser, db: State<DB>, checkin_api: State<CheckinAPI>) -> Template {
 	let devices = match Device::find(db.clone(), None, None) {
 		Ok(result) => result,
 		// Driver returns an error if no documents are found
 		Err(_) => Vec::new(),
 	};
+	let mut tags = checkin_api.get_tags_names(false).unwrap_or(Vec::new());
+    tags.sort();
+
+	#[derive(Serialize)]
+	struct Tag {
+		name: String,
+		selected: bool,
+	}
+	#[derive(Serialize)]
+	struct DeviceWithTag {
+		device: Device,
+		tags: Vec<Tag>,
+	}
+	let devices_with_tag: Vec<DeviceWithTag> = devices.into_iter().map(|device| DeviceWithTag {
+		device: device.clone(),
+		tags: tags.iter().map(|tag| Tag {
+			name: tag.to_string(),
+			selected: device.current_tag.as_ref().map(|current_tag| current_tag == tag).unwrap_or(false),
+		}).collect(),
+	}).collect();
 
 	Template::render("index", &json!({
-		"devices": devices
+		"devices": devices_with_tag,
+		"username": user.username,
 	}))
 }
 
@@ -63,6 +85,7 @@ fn main() {
 			api::reject_device,
 			api::force_renew_device,
 			api::delete_device,
+			api::set_tag,
 		])
 		.mount("/css", StaticFiles::from("src/ui/css"))
 		.mount("/js", StaticFiles::from("src/ui/js"))
