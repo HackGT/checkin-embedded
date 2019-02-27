@@ -12,3 +12,5 @@
 **/*.rs.bk
 
 /server/instance\.key
+
+server/src/ui/js/index\.js

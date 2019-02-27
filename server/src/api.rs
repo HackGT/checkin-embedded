@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use rocket::{ Request, Data, Outcome, State };
 use rocket::http::{ Status, ContentType };
 use rocket::data::{ self, FromDataSimple };
-use rocket_contrib::json::JsonValue;
+use rocket_contrib::json::{ Json, JsonValue };
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use ed25519_dalek::{ PublicKey, Signature };
@@ -12,6 +12,7 @@ use wither::model::Model;
 use hackgt_nfc::api::CheckinAPI;
 use crate::DB;
 use crate::models::Device;
+use crate::auth::AuthenticatedUser;
 
 // Implement signature authentication for JSON bodies
 #[derive(Debug)]
@@ -144,6 +145,7 @@ pub fn initialize(request: SignedRequest<InitializeRequest>, db: State<DB>, remo
                 ip_address: remote_addr.ip().to_string(),
 
                 authorized: false,
+                status_set_by: None,
                 pending: true,
                 credentials_created: false,
 
@@ -177,7 +179,7 @@ pub fn create_credentials(request: SignedRequest<CredentialsRequest>, db: State<
                 Ok(_) => {
                     device.update(
                         db.clone(),
-                        Some(doc! { "public_key": &request.public_key }),
+                        None,
                         doc! { "$set": { "credentials_created": true } },
                         None
                     )?;
@@ -214,4 +216,132 @@ pub fn get_tag(username: Option<String>, db: State<DB>, checkin_api: State<Check
         "current": current_tag,
         "all": tags,
     }))
+}
+
+// Device actions called by JS in web UI
+#[derive(Deserialize)]
+pub struct DeviceButtonAction {
+    username: String,
+}
+
+#[post("/device/authorize", format = "json", data = "<request>")]
+pub fn authorize_device(user: AuthenticatedUser, request: Json<DeviceButtonAction>, db: State<DB>) -> Result<JsonValue, mongodb::error::Error> {
+    let response = match Device::find_one(db.clone(), Some(doc! { "username": &request.username }), None)? {
+        Some(device) => {
+            device.update(
+                db.clone(),
+                None,
+                doc! { "$set": {
+                    "authorized": true,
+                    "status_set_by": &user.username,
+                    "pending": false,
+                } },
+                None
+            )?;
+            json!({
+                "success": true,
+            })
+        },
+        None => {
+            json!({
+                "success": false,
+                "error": "Device not found",
+            })
+        }
+    };
+    Ok(response)
+}
+
+#[post("/device/reject", format = "json", data = "<request>")]
+pub fn reject_device(user: AuthenticatedUser, request: Json<DeviceButtonAction>, db: State<DB>) -> Result<JsonValue, mongodb::error::Error> {
+    let response = match Device::find_one(db.clone(), Some(doc! { "username": &request.username }), None)? {
+        Some(device) => {
+            device.update(
+                db.clone(),
+                None,
+                doc! { "$set": {
+                    "authorized": false,
+                    "status_set_by": &user.username,
+                    "pending": false,
+                } },
+                None
+            )?;
+            json!({
+                "success": true,
+            })
+        },
+        None => {
+            json!({
+                "success": false,
+                "error": "Device not found",
+            })
+        }
+    };
+    Ok(response)
+}
+
+#[post("/device/force-renew", format = "json", data = "<request>")]
+pub fn force_renew_device(request: Json<DeviceButtonAction>, db: State<DB>, checkin_api: State<CheckinAPI>) -> Result<JsonValue, mongodb::error::Error> {
+    let response = match Device::find_one(db.clone(), Some(doc! { "username": &request.username }), None)? {
+        Some(device) => {
+            match checkin_api.delete_user(&request.username) {
+                Ok(_) => {
+                    device.update(
+                        db.clone(),
+                        None,
+                        doc! { "$set": {
+                            "credentials_created": false,
+                        } },
+                        None
+                    )?;
+                    json!({
+                        "success": true,
+                    })
+                },
+                Err(err) => {
+                    json!({
+                        "success": false,
+                        "error": "Failed to delete user account",
+                        "details": format!("{:?}", err),
+                    })
+                }
+            }
+        },
+        None => {
+            json!({
+                "success": false,
+                "error": "Device not found",
+            })
+        }
+    };
+    Ok(response)
+}
+
+#[post("/device/delete", format = "json", data = "<request>")]
+pub fn delete_device(request: Json<DeviceButtonAction>, db: State<DB>, checkin_api: State<CheckinAPI>) -> Result<JsonValue, mongodb::error::Error> {
+    let response = match Device::find_one(db.clone(), Some(doc! { "username": &request.username }), None)? {
+        Some(device) => {
+            if device.credentials_created {
+                // Delete this device's checkin2 account if one exists
+                if let Err(err) = checkin_api.delete_user(&request.username) {
+                    return Ok(json!({
+                        "success": false,
+                        "error": "Failed to delete device's checkin2 account",
+                        "details": format!("{:?}", err),
+                    }));
+                }
+            }
+            device.delete(db.clone())?;
+            json!({
+                "success": true,
+            })
+        },
+        None => {
+            json!({
+                "success": false,
+                "error": "Device not found",
+            })
+        }
+    };
+    Ok(response)
 }

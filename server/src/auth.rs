@@ -10,6 +10,14 @@ use crate::models::User;
 
 pub struct AuthenticatedUser(User);
 
+impl std::ops::Deref for AuthenticatedUser {
+    type Target = User;
+    #[inline(always)]
+    fn deref(&self) -> &User {
+        &self.0
+    }
+}
+
 #[derive(Debug)]
 pub enum AuthenticatedUserError {
     Missing,

@@ -18,6 +18,7 @@ pub struct Device {
 	pub ip_address: String,
 
 	pub authorized: bool,
+	pub status_set_by: Option<String>,
 	pub pending: bool,
 	pub credentials_created: bool,
 

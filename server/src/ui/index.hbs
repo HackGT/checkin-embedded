@@ -5,9 +5,13 @@
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1">
 		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bulma/0.7.2/css/bulma.min.css" />
+		<script defer src="js/index.js"></script>
 		<style>
 			table {
 				width: 100%;
+			}
+			td {
+				vertical-align: middle !important;
 			}
 		</style>
 	</head>
@@ -15,10 +19,11 @@
 		<section class="section container">
 			<h1 class="title">HackGT Check-In</h1>
 			<p class="subtitle">Embedded Manager UI</p>
-			<table class="table">
+			<table class="table is-hoverable">
 				<thead>
 					<th>Name</th>
 					<th>IP Address</th>
+					<th>Status</th>
 					<th>Actions</th>
 				</thead>
 				<tbody>
@@ -26,6 +31,34 @@
 						<tr>
 							<td title="{{username}}">{{friendly_name}}</td>
 							<td>{{ip_address}}</td>
+							{{!-- Status --}}
+							<td>
+								{{#if pending}}
+									<code>Pending</code>
+								{{/if}}
+								{{#if authorized}}
+									<code>Authorized</code>
+								{{else}}
+									<code>!Authorized</code>
+								{{/if}}
+								{{#if credentials_created}}
+									<code>Credentialed</code>
+								{{else}}
+									<code>!Credentialed</code>
+								{{/if}}
+							</td>
+							{{!-- Actions --}}
+							<td data-username="{{username}}">
+								{{#if pending}}
+									<button class="button is-success action-authorize">Authorize</button>
+									<button class="button is-danger action-reject">Reject</button>
+								{{else}}
+									{{#if credentials_created}}
+										<button class="button is-warning action-force-renew">Force account renewal</button>
+									{{/if}}
+									<button class="button is-danger action-delete">Delete</button>
+								{{/if}}
+							</td>
 						</tr>
 					{{else}}
 						<tr>

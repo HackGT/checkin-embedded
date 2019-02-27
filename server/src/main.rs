@@ -59,9 +59,13 @@ fn main() {
 			api::initialize,
 			api::create_credentials,
 			api::get_tag,
+			api::authorize_device,
+			api::reject_device,
+			api::force_renew_device,
+			api::delete_device,
 		])
-		.mount("/css", StaticFiles::from("/ui/css"))
-		.mount("/js", StaticFiles::from("/ui/js"))
+		.mount("/css", StaticFiles::from("src/ui/css"))
+		.mount("/js", StaticFiles::from("src/ui/js"))
 		.register(catchers![
 			auth::unauthorized_redirect
 		])
