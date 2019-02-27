@@ -75,7 +75,8 @@ fn main() {
 		.mount("/", routes![index])
 		.mount("/auth", routes![
 			auth::login,
-			auth::process_login
+			auth::process_login,
+			auth::logout,
 		])
 		.mount("/api", routes![
 			api::initialize,

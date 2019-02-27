@@ -32,18 +32,18 @@ impl<'a, 'r> FromRequest<'a, 'r> for AuthenticatedUser {
         let cookies = request.cookies();
 		let token = cookies.get("auth").map(|cookie| cookie.value());
         match token {
+            Some("") | None => {
+                Outcome::Failure((Status::Unauthorized, AuthenticatedUserError::Missing))
+            },
             Some(token) => {
                 let db = request.guard::<State<DB>>().unwrap();
                 let user = User::find_one(db.clone(), Some(doc!{ "auth_token": token }), None);
                 match user {
                     Ok(Some(user)) => Outcome::Success(AuthenticatedUser(user)),
-                    Ok(None) => Outcome::Failure((Status::Forbidden, AuthenticatedUserError::Invalid)),
+                    Ok(None) => Outcome::Failure((Status::Unauthorized, AuthenticatedUserError::Invalid)),
                     Err(err) => Outcome::Failure((Status::InternalServerError, AuthenticatedUserError::DBError(err))),
                 }
-            },
-            None => {
-                Outcome::Failure((Status::Unauthorized, AuthenticatedUserError::Missing))
-            },
+            }
         }
     }
 }
@@ -51,6 +51,20 @@ impl<'a, 'r> FromRequest<'a, 'r> for AuthenticatedUser {
 #[get("/login")]
 pub fn login() -> Template {
     Template::render("login", &json!({}))
+}
+
+fn create_auth_cookie(value: String) -> Cookie<'static> {
+    Cookie::build("auth", value)
+        .path("/")
+        .secure(!cfg!(debug_assertions)) // Will be secure-only when built with --release
+        .http_only(true)
+        .finish()
+}
+
+#[get("/logout")]
+pub fn logout(mut cookies: Cookies) -> Redirect {
+    cookies.add(create_auth_cookie(String::new()));
+    Redirect::to("/auth/login")
 }
 
 #[derive(FromForm, Debug)]
@@ -69,13 +83,7 @@ pub fn process_login(body: Form<LoginInfo>, mut cookies: Cookies, db: State<DB>)
                 auth_token: token.to_owned(),
             };
             user.save(db.clone(), None).unwrap();
-            cookies.add(
-                Cookie::build("auth", token.to_owned())
-                .path("/")
-                .secure(!cfg!(debug_assertions)) // Will be secure-only when built with --release
-                .http_only(true)
-                .finish()
-            );
+            cookies.add(create_auth_cookie(token.to_owned()));
             Redirect::to("/")
         },
         Err(err) => {
