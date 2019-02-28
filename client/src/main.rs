@@ -89,6 +89,8 @@ fn main() {
         // fake news
         // my 3:42am knowledges says that this is somehow the cause:
         // badge.get_user_id().unwrap();
+        // Only seems to be a problem on Linux (pcsclite)
+        // I ran the same code on Windows and it was significantly faster
 
         match badge.get_user_id() {
             Ok(_) if current_tag.is_none() => {
@@ -99,7 +101,7 @@ fn main() {
                 notifier.scroll_text("No check-in tag defined by manager");
             },
             Ok(id) => {
-                match api.check_in(&id, "123") {
+                match api.check_in(&id, current_tag.as_ref().unwrap()) {
                     Ok((success, user, tag)) => {
                         if success {
                             notifier.flash(true, 500);
