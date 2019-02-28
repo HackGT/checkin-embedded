@@ -3,6 +3,7 @@ use rppal::i2c::Result;
 use rppal::gpio::Gpio;
 use std::{ thread, time };
 use std::sync::{ Arc, Mutex };
+use std::sync::atomic::{ AtomicBool, Ordering };
 
 pub struct HT16K33 {
 	device: I2c,
@@ -263,6 +264,7 @@ impl Tone {
 pub struct Notifier {
 	success_display: Arc<Mutex<HT16K33>>,
 	error_display: Arc<Mutex<HT16K33>>,
+	display_lock: Arc<AtomicBool>,
 	buzzer: Arc<Mutex<rppal::gpio::OutputPin>>,
 }
 impl Notifier {
@@ -277,8 +279,19 @@ impl Notifier {
 		Self {
 			success_display,
 			error_display,
+			display_lock: Arc::new(AtomicBool::new(false)), // Is a display locked?
 			buzzer,
 		}
+	}
+
+	fn wait_for_display_lock(&self) -> Arc<AtomicBool> {
+		let display_lock = Arc::clone(&self.display_lock);
+		// Wait until a previous notifier thread acquires its individual display locks and unlocks the general display_lock
+		while display_lock.compare_and_swap(false, true, Ordering::Acquire) {
+			thread::sleep(time::Duration::from_millis(1)); // Try not to pin the CPU with an empty loop
+		}
+		// We have the lock and can now proceed to acquire individual display locks within spawned threads
+		display_lock
 	}
 
 	pub fn scroll_text(&self, text: &str) {
@@ -290,9 +303,12 @@ impl Notifier {
 		let success_display = Arc::clone(&self.success_display);
 		let error_display = Arc::clone(&self.error_display);
 		let text = text.to_owned();
+		let display_lock = self.wait_for_display_lock();
 		thread::spawn(move || {
 			let mut success_display = success_display.lock().unwrap();
 			let mut error_display = error_display.lock().unwrap();
+			// Now that we have secured the locks, we can release the general display_lock to allow other notifier threads to spawn
+			display_lock.store(false, Ordering::Release);
 
 			// List goes right to left
 			HT16K33::scroll_text(&text, &mut [&mut *error_display, &mut *success_display], millis_per_column).unwrap();
@@ -302,8 +318,10 @@ impl Notifier {
 	pub fn flash(&self, success: bool, duration: u64) {
 		let display = if success { &self.success_display } else { &self.error_display };
 		let display = Arc::clone(&display);
+		let display_lock = self.wait_for_display_lock();
 		thread::spawn(move || {
 			let mut display = display.lock().unwrap();
+			display_lock.store(false, Ordering::Release);
 
 			display.all_on().unwrap();
 			thread::sleep(time::Duration::from_millis(duration));
@@ -314,8 +332,10 @@ impl Notifier {
 	pub fn flash_multiple(&self, success: bool, durations: Vec<u64>) {
 		let display = if success { &self.success_display } else { &self.error_display };
 		let display = Arc::clone(&display);
+		let display_lock = self.wait_for_display_lock();
 		thread::spawn(move || {
 			let mut display = display.lock().unwrap();
+			display_lock.store(false, Ordering::Release);
 
 			let mut is_on = false;
 			for duration in durations.iter() {
