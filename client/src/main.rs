@@ -1,10 +1,8 @@
 use hackgt_nfc::api::CheckinAPI;
-use hackgt_nfc::nfc::handle_cards;
+use hackgt_nfc::nfc::{ handle_cards, NFCBadge };
 use chrono::DateTime;
 use std::sync::Arc;
 
-mod badge;
-mod ndef;
 mod api;
 use api::{ ManagerAPI, ManagedStatus };
 mod crypto;
@@ -50,6 +48,7 @@ fn main() {
         Ok(ManagedStatus::Unauthorized) => {
             eprintln!("Check-in instance <{}> has been denied access in the manager UI", manager.get_name());
             notifier.scroll_text("Denied access in manager UI");
+            notifier.scroll_text_speed("Exiting...", 30);
             std::thread::sleep(std::time::Duration::from_secs(30));
             std::process::exit(1)
         },
@@ -78,7 +77,7 @@ fn main() {
 
     // Set up card polling
     let handler_thread = handle_cards(move |card, _reader, _reader_index| {
-        let badge = badge::NFCBadge::new(&card);
+        let badge = NFCBadge::new(&card);
         badge.set_buzzer(false).unwrap();
 
         let current_tag = Arc::clone(&manager.current_tag);
