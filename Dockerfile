@@ -1,20 +1,10 @@
-FROM rustlang/rust:nightly
+FROM hackgt/checkin-embedded-init:latest
 
-# Create empty shell project
-RUN USER=root cargo new --bin checkin-embedded
-WORKDIR /checkin-embedded
-
-COPY ./server/Cargo.lock ./Cargo.lock
-COPY ./server/Cargo.toml ./Cargo.toml
-
-# This will cache dependencies
+WORKDIR /usr/src/checkin-embedded
+COPY ./server /usr/src/checkin-embedded
 RUN cargo build --release
-RUN rm src/*.rs
-
-COPY ./server/src ./src
-
-# Build for release
-RUN cargo build --release
-
+FROM debian
+COPY --from=0 /usr/src/checkin-embedded/target/release/checkin-embedded-server /checkin-embedded-server
+RUN apt-get update && apt-get install libssl-dev -y
 EXPOSE 3000
-CMD ["cargo", "run"]
+CMD /checkin-embedded-server
