@@ -1,7 +1,7 @@
 use std::ops::{ Deref, DerefMut };
 use std::io::Read;
-use std::net::SocketAddr;
-use rocket::{ Request, Data, Outcome, State };
+use rocket::request::{ self, Request, FromRequest };
+use rocket::{ Data, Outcome, State };
 use rocket::http::{ Status, ContentType };
 use rocket::data::{ self, FromDataSimple };
 use rocket_contrib::json::{ Json, JsonValue };
@@ -13,6 +13,26 @@ use hackgt_nfc::api::CheckinAPI;
 use crate::DB;
 use crate::models::Device;
 use crate::auth::AuthenticatedUser;
+
+pub struct IP(String);
+
+impl IP {
+    fn as_str(&self) -> &str {
+        self.0.as_str()
+    }
+}
+
+impl<'a, 'r> FromRequest<'a, 'r> for IP {
+    type Error = !;
+
+    fn from_request(request: &'a Request<'r>) -> request::Outcome<Self, Self::Error> {
+        // Gets IP from either X-Real-IP (if behind proxy) or directly from the connection
+        let ip = request.client_ip()
+            .map(|ip| ip.to_string())
+            .unwrap_or(String::from("Unknown IP"));
+        Outcome::Success(IP(ip))
+    }
+}
 
 // Implement signature authentication for JSON bodies
 #[derive(Debug)]
@@ -114,7 +134,7 @@ pub struct InitializeRequest {
 }
 
 #[post("/initialize", format = "json", data = "<request>")]
-pub fn initialize(request: SignedRequest<InitializeRequest>, db: State<DB>, remote_addr: SocketAddr) -> Result<JsonValue, mongodb::error::Error> {
+pub fn initialize(request: SignedRequest<InitializeRequest>, db: State<DB>, ip: IP) -> Result<JsonValue, mongodb::error::Error> {
     match Device::find_one(db.clone(), Some(doc! { "public_key": &request.public_key }), None)? {
         // Device already requested access, return status
         Some(device) => {
@@ -130,6 +150,14 @@ pub fn initialize(request: SignedRequest<InitializeRequest>, db: State<DB>, remo
             else {
                 "Unauthorized"
             };
+            device.update(
+                db.clone(),
+                None,
+                doc! { "$set": {
+                    "ip_address": ip.as_str(),
+                } },
+                None
+            )?;
             Ok(json!({
                 "status": status
             }))
@@ -142,7 +170,7 @@ pub fn initialize(request: SignedRequest<InitializeRequest>, db: State<DB>, remo
                 public_key: request.public_key.clone(),
                 username: request.username.clone(),
                 friendly_name: String::from(&request.username[..16]),
-                ip_address: remote_addr.ip().to_string(),
+                ip_address: ip.as_str().to_owned(),
 
                 authorized: false,
                 status_set_by: None,
