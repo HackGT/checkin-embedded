@@ -6,5 +6,5 @@ RUN cargo build --release
 FROM debian
 COPY --from=0 /usr/src/checkin-embedded/target/release/checkin-embedded-server /checkin-embedded-server
 RUN apt-get update && apt-get install libssl-dev -y
-EXPOSE 3000
+EXPOSE 8000
 CMD /checkin-embedded-server

@@ -6,3 +6,5 @@ wants:
 
 secrets:
   - CHECKIN_TOKEN
+
+target_port: 8000
