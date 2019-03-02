@@ -36,7 +36,7 @@
 				<tbody>
 					{{#each devices as |device|}}
 						<tr>
-							<td title="{{username}}">{{device.friendly_name}}</td>
+							<td title="{{device.username}}">{{device.friendly_name}}</td>
 							<td>{{device.ip_address}}</td>
 							<td>
 								{{#if device.authorized}}
@@ -76,6 +76,7 @@
 							</td>
 							{{!-- Actions --}}
 							<td data-username="{{device.username}}">
+								<button class="button action-rename">Rename</button>
 								{{#if device.pending}}
 									<button class="button is-success action-authorize">Authorize</button>
 									<button class="button is-danger action-reject">Reject</button>

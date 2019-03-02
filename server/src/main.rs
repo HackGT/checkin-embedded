@@ -86,6 +86,7 @@ fn main() {
 			api::reject_device,
 			api::force_renew_device,
 			api::delete_device,
+			api::rename_device,
 			api::set_tag,
 		])
 		.mount("/css", StaticFiles::from("src/ui/css"))

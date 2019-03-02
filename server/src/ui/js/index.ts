@@ -69,6 +69,24 @@ setupButtonHandlers("action-delete", async id => {
 		alert(`${response.error} (${response.details || "No details"})`);
 	}
 });
+setupButtonHandlers("action-rename", async id => {
+	let name = prompt("New device name:");
+	if (!name) return;
+	let response = await fetch("/api/device/rename", {
+		method: "POST",
+		credentials: "include",
+		headers: {
+			"Content-Type": "application/json"
+		},
+		body: JSON.stringify({ username: id, name })
+	}).then(response => response.json());
+	if (response.success) {
+		window.location.reload();
+	}
+	else {
+		alert(`${response.error} (${response.details || "No details"})`);
+	}
+});
 
 let selects = document.getElementsByClassName("tag-select") as HTMLCollectionOf<HTMLSelectElement>;
 for (let i = 0; i < selects.length; i++) {

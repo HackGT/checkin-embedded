@@ -144,6 +144,34 @@ setupButtonHandlers("action-delete", function (id) { return __awaiter(_this, voi
         }
     });
 }); });
+setupButtonHandlers("action-rename", function (id) { return __awaiter(_this, void 0, void 0, function () {
+    var name, response;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                name = prompt("New device name:");
+                if (!name)
+                    return [2 /*return*/];
+                return [4 /*yield*/, fetch("/api/device/rename", {
+                        method: "POST",
+                        credentials: "include",
+                        headers: {
+                            "Content-Type": "application/json"
+                        },
+                        body: JSON.stringify({ username: id, name: name })
+                    }).then(function (response) { return response.json(); })];
+            case 1:
+                response = _a.sent();
+                if (response.success) {
+                    window.location.reload();
+                }
+                else {
+                    alert(response.error + " (" + (response.details || "No details") + ")");
+                }
+                return [2 /*return*/];
+        }
+    });
+}); });
 var selects = document.getElementsByClassName("tag-select");
 for (var i = 0; i < selects.length; i++) {
     selects[i].addEventListener("change", function (e) { return __awaiter(_this, void 0, void 0, function () {
