@@ -34,7 +34,13 @@ fn main() {
                     }
                     CheckinAPI::login(&credentials.username, &credentials.password).expect("Invalid credentials after server apparently created our account again")
                 },
-                Err(err) => panic!(err),
+                Err(err) => {
+                    notifier.scroll_text("Failed to log in to check in API (offline?)");
+                    notifier.scroll_text(&format!("{:?}", err));
+                    notifier.scroll_text_speed("Exiting...", 30);
+                    std::thread::sleep(std::time::Duration::from_secs(30));
+                    panic!(err)
+                }
             }
         },
         Ok(ManagedStatus::AuthorizedNoCredentials) => {
@@ -63,6 +69,7 @@ fn main() {
         },
         Err(err) => {
             notifier.scroll_text("Failed to get status from manager (offline?)");
+            notifier.scroll_text(&format!("{:?}", err));
             notifier.scroll_text_speed("Exiting...", 30);
             std::thread::sleep(std::time::Duration::from_secs(30));
             panic!(err)
