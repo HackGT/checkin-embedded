@@ -16,7 +16,7 @@ wither_derive = "0.8.0"
 rocket = "0.4.0"
 
 [dependencies.hackgt-nfc]
-version = "0.3.1"
+version = "0.3.2"
 default-features = false
 features = [] # We don't want the server to depend on the PCSC library
 

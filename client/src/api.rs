@@ -172,6 +172,29 @@ impl ManagerAPI {
 		Ok(response.current)
 	}
 
+	pub fn update_tag(&self, notifier: &Notifier) {
+		let current_tag = Arc::clone(&self.current_tag);
+		match self.get_tag() {
+			Ok(Some(new_tag)) => {
+				let mut tag = current_tag.write().unwrap();
+				// Only update if changed
+				if tag.is_none() || tag.as_ref().unwrap() != &new_tag {
+					*tag = Some(new_tag);
+					notifier.scroll_text(&format!("Using new tag: {}", tag.as_ref().unwrap()));
+				}
+				else if !tag.is_none() {
+					notifier.scroll_text(&format!("Tag: {}", tag.as_ref().unwrap()));
+				}
+			},
+			Ok(None) => {
+				let mut tag = current_tag.write().unwrap();
+				*tag = None;
+				notifier.scroll_text_speed("No tag defined by manager", 15);
+			},
+			Err(err) => println!("Tag check: {:?}", err)
+		}
+	}
+
 	pub fn start_polling_for_tag(&self, seconds: u64, notifier: Arc<Notifier>) {
 		// Spawn a thread that checks for current check-in tag
 		let thread_instance = self.clone();

@@ -4,6 +4,7 @@ use rppal::gpio::Gpio;
 use std::{ thread, time };
 use std::sync::{ Arc, Mutex };
 use std::sync::atomic::{ AtomicBool, Ordering };
+use crate::api::ManagerAPI;
 
 pub struct HT16K33 {
 	device: I2c,
@@ -373,5 +374,21 @@ impl Notifier {
 				}
 			}
 		});
+	}
+
+	pub fn setup_reset_button() {
+		const RESET_BUTTON: u8 = 24;
+	}
+
+	pub fn setup_tag_button(&self, manager: Arc<ManagerAPI>, notifier: Arc<Notifier>) {
+		const TAG_BUTTON: u8 = 23;
+
+		let manager = Arc::clone(&manager);
+		let notifier = Arc::clone(&notifier);
+		let gpio = Gpio::new().unwrap();
+		let mut button = gpio.get(TAG_BUTTON).unwrap().into_input_pullup();
+		button.set_async_interrupt(rppal::gpio::Trigger::FallingEdge, move |_level| {
+			manager.update_tag(&notifier);
+		}).unwrap();
 	}
 }

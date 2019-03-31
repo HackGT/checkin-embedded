@@ -15,7 +15,9 @@ fn main() {
     notifier.scroll_text_speed("Logging in...", 10);
 
     // Bootstrap connection to manager
-    let manager = ManagerAPI::new();
+    let manager_arc = Arc::new(ManagerAPI::new());
+    let manager = manager_arc.clone();
+
     let signer = crypto::Signer::load();
     let api: CheckinAPI = match manager.initialize() {
         Ok(ManagedStatus::AuthorizedHasCredentials) => {
@@ -60,11 +62,15 @@ fn main() {
             std::process::exit(1)
         },
         Err(err) => {
+            notifier.scroll_text("Failed to get status from manager (offline?)");
+            notifier.scroll_text_speed("Exiting...", 30);
+            std::thread::sleep(std::time::Duration::from_secs(30));
             panic!(err)
         }
     };
     // Spawns a thread to check for tag updates
     manager.start_polling_for_tag(30, notifier_arc.clone());
+    notifier.setup_tag_button(manager_arc.clone(), notifier_arc.clone());
 
     // Signify that we're logged in and ready to go
     notifier.flash_multiple(false, vec![500, 200, 100, 0]);
