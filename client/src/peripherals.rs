@@ -376,8 +376,21 @@ impl Notifier {
 		});
 	}
 
-	pub fn setup_reset_button() {
+	pub fn setup_reset_button(&self) {
 		const RESET_BUTTON: u8 = 24;
+
+		let gpio = Gpio::new().unwrap();
+		let button = gpio.get(RESET_BUTTON).unwrap().into_input_pullup();
+
+		thread::spawn(move || {
+			loop {
+				if button.is_low() {
+					use std::os::unix::process::CommandExt;
+					std::process::Command::new("/proc/self/exe").exec();
+				}
+				thread::sleep(time::Duration::from_millis(50));
+			}
+		});
 	}
 
 	pub fn setup_tag_button(&self, manager: Arc<ManagerAPI>, notifier: Arc<Notifier>) {
@@ -386,9 +399,18 @@ impl Notifier {
 		let manager = Arc::clone(&manager);
 		let notifier = Arc::clone(&notifier);
 		let gpio = Gpio::new().unwrap();
-		let mut button = gpio.get(TAG_BUTTON).unwrap().into_input_pullup();
-		button.set_async_interrupt(rppal::gpio::Trigger::FallingEdge, move |_level| {
-			manager.update_tag(&notifier);
-		}).unwrap();
+		let button = gpio.get(TAG_BUTTON).unwrap().into_input_pullup();
+
+		thread::spawn(move || {
+			loop {
+				if button.is_low() {
+					manager.update_tag(&notifier);
+					while button.is_low() {
+						thread::sleep(time::Duration::from_millis(50));
+					}
+				}
+				thread::sleep(time::Duration::from_millis(50));
+			}
+		});
 	}
 }

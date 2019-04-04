@@ -79,6 +79,7 @@ fn main() {
     // Spawns a thread to check for tag updates
     manager.start_polling_for_tag(30, notifier_arc.clone());
     notifier.setup_tag_button(manager_arc.clone(), notifier_arc.clone());
+    notifier.setup_reset_button();
 
     // Signify that we're logged in and ready to go
     notifier.flash_multiple(false, vec![500, 200, 100, 0]);
