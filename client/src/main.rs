@@ -14,6 +14,13 @@ fn main() {
     let notifier = notifier_arc.clone();
     notifier.scroll_text_speed("Logging in...", 10);
 
+    let exit_with_error = |message: &str| -> ! {
+        notifier.scroll_text(message);
+        notifier.scroll_text_speed("Exiting...", 30);
+        std::thread::sleep(std::time::Duration::from_secs(30));
+        std::process::exit(1);
+    };
+
     // Bootstrap connection to manager
     let manager_arc = Arc::new(ManagerAPI::new());
     let manager = manager_arc.clone();
@@ -29,17 +36,17 @@ fn main() {
                 Err(hackgt_nfc::api::Error::Message("Invalid username or password")) => {
                     let response = manager.create_credentials().unwrap();
                     if !response.success {
-                        eprintln!("Invalid credentials even though server thinks we already have an account: {:?} ({:?})", response.error, response.details);
-                        std::process::exit(1);
+                        let err = format!("Invalid credentials even though server thinks we already have an account: {:?} ({:?})", response.error, response.details);
+                        eprintln!("{}", &err);
+                        exit_with_error(&err);
                     }
                     CheckinAPI::login(&credentials.username, &credentials.password).expect("Invalid credentials after server apparently created our account again")
                 },
                 Err(err) => {
+                    let err = format!("{:?}", err);
+                    eprintln!("Unhandled error: {}", &err);
                     notifier.scroll_text("Failed to log in to check in API (offline?)");
-                    notifier.scroll_text(&format!("{:?}", err));
-                    notifier.scroll_text_speed("Exiting...", 30);
-                    std::thread::sleep(std::time::Duration::from_secs(30));
-                    panic!(err)
+                    exit_with_error(&err);
                 }
             }
         },
@@ -47,32 +54,26 @@ fn main() {
             // Request server create an account with our credentials
             let response = manager.create_credentials().unwrap();
             if !response.success {
-                eprintln!("Failed to create credentials: {:?} ({:?})", response.error, response.details);
-                std::process::exit(1);
+                let err = format!("Failed to create credentials: {:?} ({:?})", response.error, response.details);
+                eprintln!("{}", &err);
+                exit_with_error(&err);
             }
             let credentials = signer.get_api_credentials();
             CheckinAPI::login(&credentials.username, &credentials.password).expect("Invalid credentials after server apparently created our account")
         },
         Ok(ManagedStatus::Unauthorized) => {
             eprintln!("Check-in instance <{}> has been denied access in the manager UI", manager.get_name());
-            notifier.scroll_text("Denied access in manager UI");
-            notifier.scroll_text_speed("Exiting...", 30);
-            std::thread::sleep(std::time::Duration::from_secs(30));
-            std::process::exit(1)
+            exit_with_error("Denied access in manager UI");
         },
         Ok(ManagedStatus::Pending) => {
             eprintln!("Check-in instance <{}> must be approved in the manager UI before use", manager.get_name());
-            notifier.scroll_text("Must approve device in manager UI before use");
-            notifier.scroll_text_speed("Exiting...", 30);
-            std::thread::sleep(std::time::Duration::from_secs(30));
-            std::process::exit(1)
+            exit_with_error("Must approve device in manager UI before use");
         },
         Err(err) => {
+            let err = format!("{:?}", err);
+            eprintln!("Unhandled error: {}", &err);
             notifier.scroll_text("Failed to get status from manager (offline?)");
-            notifier.scroll_text(&format!("{:?}", err));
-            notifier.scroll_text_speed("Exiting...", 30);
-            std::thread::sleep(std::time::Duration::from_secs(30));
-            panic!(err)
+            exit_with_error(&err);
         }
     };
     // Spawns a thread to check for tag updates
