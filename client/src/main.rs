@@ -9,9 +9,11 @@ mod crypto;
 mod peripherals;
 
 fn main() {
-    // We'll be using this notifer on the main thread + the tag update thread so it needs to be behind an Arc
+    println!("--- START UP ---");
+    // We'll be using this notifier on the main thread + the tag update thread so it needs to be behind an Arc
     let notifier_arc = Arc::new(peripherals::Notifier::start(0x70, 0x71, 18));
     let notifier = notifier_arc.clone();
+    notifier.setup_reset_button();
     notifier.scroll_text_speed("Logging in...", 10);
 
     let exit_with_error = |message: &str| -> ! {
@@ -79,7 +81,6 @@ fn main() {
     // Spawns a thread to check for tag updates
     manager.start_polling_for_tag(30, notifier_arc.clone());
     notifier.setup_tag_button(manager_arc.clone(), notifier_arc.clone());
-    notifier.setup_reset_button();
 
     // Signify that we're logged in and ready to go
     notifier.flash_multiple(false, vec![500, 200, 100, 0]);
@@ -169,6 +170,14 @@ fn main() {
                 notifier.scroll_text("Try again");
             }
         };
+    }, move |reader, added| {
+        let notifier = notifier_arc.clone();
+        if added {
+            notifier.scroll_text_speed("Reader connected", 10);
+        }
+        else {
+            notifier.scroll_text_speed("Reader disconnected", 10);
+        }
     });
     handler_thread.join().unwrap();
 }
