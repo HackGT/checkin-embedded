@@ -352,6 +352,18 @@ impl Notifier {
 		});
 	}
 
+	pub fn flash_alternate(&self, durations: Vec<u64>, notifier: &Arc<Notifier>) {
+		let notifier = notifier.clone();
+		thread::spawn(move || {
+			let mut success_display = true;
+			for duration in durations.iter() {
+				notifier.flash(success_display, *duration);
+				thread::sleep(time::Duration::from_millis(*duration));
+				success_display = !success_display;
+			}
+		});
+	}
+
 	pub fn beep(&self, tones: Vec<Tone>) {
 		let buzzer = Arc::clone(&self.buzzer);
 		thread::spawn(move || {
@@ -387,17 +399,20 @@ impl Notifier {
 				if button.is_low() {
 					use std::os::unix::process::CommandExt;
 					std::process::Command::new("/proc/self/exe").exec();
+					while button.is_low() {
+						thread::sleep(time::Duration::from_millis(50));
+					}
 				}
 				thread::sleep(time::Duration::from_millis(50));
 			}
 		});
 	}
 
-	pub fn setup_tag_button(&self, manager: Arc<ManagerAPI>, notifier: Arc<Notifier>) {
+	pub fn setup_tag_button(&self, manager: &Arc<ManagerAPI>, notifier: &Arc<Notifier>) {
 		const TAG_BUTTON: u8 = 23;
 
-		let manager = Arc::clone(&manager);
-		let notifier = Arc::clone(&notifier);
+		let manager = Arc::clone(manager);
+		let notifier = Arc::clone(notifier);
 		let gpio = Gpio::new().unwrap();
 		let button = gpio.get(TAG_BUTTON).unwrap().into_input_pullup();
 

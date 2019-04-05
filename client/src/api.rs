@@ -69,7 +69,11 @@ impl ManagerAPI {
 	}
 
 	pub fn new() -> Self {
-		let client = reqwest::Client::new();
+		let client = reqwest::Client::builder()
+			.use_rustls_tls()
+			.timeout(Some(time::Duration::from_secs(10)))
+			.build()
+			.expect("Failed to construct client");
 		let base_url = Url::parse(ManagerAPI::base_url()).expect("Invalid base URL configured");
 		Self {
 			base_url,

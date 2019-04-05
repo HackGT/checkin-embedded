@@ -14,7 +14,7 @@ fn main() {
     let notifier_arc = Arc::new(peripherals::Notifier::start(0x70, 0x71, 18));
     let notifier = notifier_arc.clone();
     notifier.setup_reset_button();
-    notifier.scroll_text_speed("Logging in...", 10);
+    notifier.flash_alternate(vec![150, 150, 150, 150, 150, 150], &notifier_arc);
 
     let exit_with_error = |message: &str| -> ! {
         notifier.scroll_text(message);
@@ -24,11 +24,26 @@ fn main() {
     };
 
     // Bootstrap connection to manager
-    let manager_arc = Arc::new(ManagerAPI::new());
-    let manager = manager_arc.clone();
-
+    // Network might not come up right away so keep trying
+    let (manager, result) = loop {
+        let manager = ManagerAPI::new();
+        let result = manager.initialize();
+        if result.is_ok() {
+            break (manager, result);
+        }
+        const WAIT_TIME: u64 = 5; // seconds
+        const FLASH_TIME: u64 = 500; // milliseconds
+        let start = std::time::SystemTime::now();
+        while start.elapsed().unwrap().as_secs() < WAIT_TIME {
+            notifier.flash_alternate(vec![FLASH_TIME, FLASH_TIME], &notifier_arc);
+            std::thread::sleep(std::time::Duration::from_millis(FLASH_TIME * 2));
+        }
+    };
+    let manager_arc = Arc::new(manager);
+    let manager = Arc::clone(&manager_arc);
     let signer = crypto::Signer::load();
-    let api: CheckinAPI = match manager.initialize() {
+
+    let api: CheckinAPI = match result {
         Ok(ManagedStatus::AuthorizedHasCredentials) => {
             // Use existing credentials
             let credentials = signer.get_api_credentials();
@@ -80,7 +95,7 @@ fn main() {
     };
     // Spawns a thread to check for tag updates
     manager.start_polling_for_tag(30, notifier_arc.clone());
-    notifier.setup_tag_button(manager_arc.clone(), notifier_arc.clone());
+    notifier.setup_tag_button(&manager_arc, &notifier_arc);
 
     // Signify that we're logged in and ready to go
     notifier.flash_multiple(false, vec![500, 200, 100, 0]);
@@ -170,7 +185,7 @@ fn main() {
                 notifier.scroll_text("Try again");
             }
         };
-    }, move |reader, added| {
+    }, move |_reader, added| {
         let notifier = notifier_arc.clone();
         if added {
             notifier.scroll_text_speed("Reader connected", 10);
