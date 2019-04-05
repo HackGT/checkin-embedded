@@ -19,8 +19,10 @@ fn main() {
     let exit_with_error = |message: &str| -> ! {
         notifier.scroll_text(message);
         notifier.scroll_text_speed("Exiting...", 30);
-        std::thread::sleep(std::time::Duration::from_secs(30));
-        std::process::exit(1);
+        loop {
+            // Basically just put this thread to sleep so that we can still handle reset button presses
+            std::thread::sleep(std::time::Duration::from_secs(30));
+        }
     };
 
     // Bootstrap connection to manager
